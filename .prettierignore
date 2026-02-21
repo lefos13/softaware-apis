@@ -1,0 +1,5 @@
+# Why this exists: generated artifacts and dependencies should not be reformatted.
+node_modules
+dist
+coverage
+docs/openapi.json

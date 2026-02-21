@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Why this exists: staged files are auto-linted/formatted before commit so
+# contract and implementation changes stay consistent and reviewable.
+npx lint-staged
