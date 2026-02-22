@@ -1,9 +1,14 @@
 /**
- * Why this exists: controller now validates merge-plan payloads and total
- * request size so frontend choices are honored without risking oversized merges.
+ * Why this exists: controller validates merge-plan payloads, updates existing
+ * task progress, and preserves binary output with correlation metadata.
  */
 import { ApiError } from '../../common/utils/api-error.js';
 import { buildResponseMeta } from '../../common/utils/api-response.js';
+import {
+  completeTaskProgress,
+  failTaskProgress,
+  updateTaskProgress,
+} from '../../common/services/task-progress-store.js';
 import { env } from '../../config/env.js';
 import { mergePdfBuffers } from './pdf.service.js';
 
@@ -22,6 +27,8 @@ function parseMergePlan(rawMergePlan) {
 }
 
 export async function mergePdfController(req, res, next) {
+  const taskId = req.taskId;
+
   try {
     const files = req.files;
 
@@ -30,6 +37,12 @@ export async function mergePdfController(req, res, next) {
         details: [{ field: 'files', issue: 'At least 2 PDF files are required' }],
       });
     }
+
+    updateTaskProgress(taskId, {
+      progress: 4,
+      step: 'Upload received, validating payload',
+      metadata: { totalFiles: files.length },
+    });
 
     const totalBytes = files.reduce((sum, file) => sum + (file.size || 0), 0);
     if (totalBytes > env.maxTotalUploadBytes) {
@@ -57,7 +70,12 @@ export async function mergePdfController(req, res, next) {
       throw error;
     }
 
-    const mergedPdf = await mergePdfBuffers(files, mergePlan);
+    const mergedPdf = await mergePdfBuffers(files, mergePlan, (progressUpdate) => {
+      updateTaskProgress(taskId, progressUpdate);
+    });
+
+    completeTaskProgress(taskId, 'Merged PDF ready for download');
+
     const outputName = `merged-${Date.now()}.pdf`;
 
     buildResponseMeta(req, res);
@@ -68,6 +86,11 @@ export async function mergePdfController(req, res, next) {
 
     res.status(200).send(Buffer.from(mergedPdf));
   } catch (error) {
+    failTaskProgress(taskId, {
+      code: error?.code,
+      message: error?.message,
+      step: 'PDF merge failed',
+    });
     next(error);
   }
 }

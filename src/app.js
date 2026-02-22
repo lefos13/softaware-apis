@@ -21,7 +21,7 @@ app.use(helmet());
 app.use(
   cors({
     origin: env.corsOrigin,
-    exposedHeaders: ['Content-Disposition', 'X-Operation-Message', 'X-Request-Id'],
+    exposedHeaders: ['Content-Disposition', 'X-Operation-Message', 'X-Request-Id', 'X-Task-Id'],
   }),
 );
 app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));

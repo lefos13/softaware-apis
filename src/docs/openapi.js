@@ -20,6 +20,8 @@ export function buildOpenApiSpec() {
       { name: 'Health', description: 'Service liveliness checks.' },
       { name: 'PDF', description: 'PDF processing endpoints.' },
       { name: 'Image', description: 'Image compression endpoints.' },
+      { name: 'Tasks', description: 'Long-running task progress endpoints.' },
+      { name: 'Admin', description: 'Administrative reporting endpoints.' },
     ],
     paths: {
       '/api/health': {
@@ -55,6 +57,16 @@ export function buildOpenApiSpec() {
           summary: 'Merge multiple PDF files',
           description: `Upload at least 2 PDF files in \`files\` plus optional \`mergePlan\` JSON for explicit order and rotation. Limits: ${env.maxUploadFiles} files, ${maxFileSizeMb} MB each, ${maxTotalUploadMb} MB total.`,
           operationId: 'mergePdf',
+          parameters: [
+            {
+              name: 'taskId',
+              in: 'query',
+              required: false,
+              schema: { type: 'string' },
+              description:
+                'Optional client-provided task id used for progress polling. If omitted, backend generates one.',
+            },
+          ],
           requestBody: {
             required: true,
             content: {
@@ -89,6 +101,11 @@ export function buildOpenApiSpec() {
                 'X-Request-Id': {
                   description: 'Request correlation id for support/debugging',
                   schema: { type: 'string', example: '2d5e4c95-cf21-4b2d-8710-8a77a66cc2d8' },
+                },
+                'X-Task-Id': {
+                  description:
+                    'Resolved task id (from query/header/generated) that can be used to poll `/api/tasks/{taskId}` progress',
+                  schema: { type: 'string', example: '8c9e7afb-573e-4d34-b6ef-8f0d03f518d6' },
                 },
               },
               content: {
@@ -138,6 +155,16 @@ export function buildOpenApiSpec() {
           summary: 'Compress one or more images',
           description: `Upload images in \`files\`, choose a mode (light/balanced/aggressive/advanced), and receive a ZIP file with compressed results. Limits: ${env.maxUploadFiles} files, ${maxFileSizeMb} MB each, ${maxTotalUploadMb} MB total.`,
           operationId: 'compressImages',
+          parameters: [
+            {
+              name: 'taskId',
+              in: 'query',
+              required: false,
+              schema: { type: 'string' },
+              description:
+                'Optional client-provided task id used for progress polling. If omitted, backend generates one.',
+            },
+          ],
           requestBody: {
             required: true,
             content: {
@@ -178,6 +205,11 @@ export function buildOpenApiSpec() {
                   description: 'Request correlation id for support/debugging',
                   schema: { type: 'string', example: '2d5e4c95-cf21-4b2d-8710-8a77a66cc2d8' },
                 },
+                'X-Task-Id': {
+                  description:
+                    'Resolved task id (from query/header/generated) that can be used to poll `/api/tasks/{taskId}` progress',
+                  schema: { type: 'string', example: '8c9e7afb-573e-4d34-b6ef-8f0d03f518d6' },
+                },
               },
               content: {
                 'application/zip': {
@@ -203,6 +235,138 @@ export function buildOpenApiSpec() {
             },
             422: {
               description: 'Uploaded file content is not a valid image',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            500: {
+              description: 'Unexpected server error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/tasks/{taskId}': {
+        get: {
+          tags: ['Tasks'],
+          summary: 'Get task progress by task id',
+          description:
+            'Returns real backend processing progress for PDF merge/image compression tasks. If task is not found yet, the response returns an initializing payload.',
+          operationId: 'getTaskProgress',
+          parameters: [
+            {
+              name: 'taskId',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
+              description:
+                'Task id returned in `X-Task-Id` header or provided by client query/header.',
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Task progress payload',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/TaskProgressSuccessResponse' },
+                },
+              },
+            },
+            500: {
+              description: 'Unexpected server error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/admin/reports': {
+        get: {
+          tags: ['Admin'],
+          summary: 'List API failure reports',
+          description:
+            'Lists most recent request-failure reports generated by backend error logging middleware.',
+          operationId: 'listFailureReports',
+          parameters: [
+            {
+              name: 'limit',
+              in: 'query',
+              required: false,
+              schema: { type: 'integer', minimum: 1, maximum: 500, default: 100 },
+              description: 'Maximum number of recent report files to return.',
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Failure reports list',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/AdminReportsListSuccessResponse' },
+                },
+              },
+            },
+            400: {
+              description: 'Invalid query parameters',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            500: {
+              description: 'Unexpected server error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/admin/reports/{fileName}': {
+        get: {
+          tags: ['Admin'],
+          summary: 'Get full API failure report details',
+          description: 'Fetches one report JSON payload by file name from logs/failures.',
+          operationId: 'getFailureReportByFileName',
+          parameters: [
+            {
+              name: 'fileName',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Report file name (for example: 2026-02-21T18-25-27-318Z-<id>.json).',
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Failure report details',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/AdminReportDetailSuccessResponse' },
+                },
+              },
+            },
+            400: {
+              description: 'Invalid file name/path',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            404: {
+              description: 'Report file not found',
               content: {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/ErrorResponse' },
@@ -304,6 +468,99 @@ export function buildOpenApiSpec() {
             lossless: { type: 'boolean', example: false },
           },
           required: ['quality', 'maxWidth', 'maxHeight', 'effort'],
+        },
+        TaskProgress: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'string', example: '8c9e7afb-573e-4d34-b6ef-8f0d03f518d6' },
+            status: {
+              type: 'string',
+              enum: ['running', 'completed', 'failed'],
+              example: 'running',
+            },
+            progress: { type: 'integer', minimum: 0, maximum: 100, example: 68 },
+            step: { type: 'string', example: 'Compressing image 2 of 5' },
+            operation: { type: 'string', example: 'image_compress' },
+            metadata: { type: 'object', additionalProperties: true },
+            error: {
+              nullable: true,
+              type: 'object',
+              properties: {
+                code: { type: 'string', example: 'INVALID_IMAGE_CONTENT' },
+                message: { type: 'string', example: 'File "x.png" could not be processed' },
+              },
+            },
+            startedAt: { type: 'string', format: 'date-time' },
+            completedAt: { nullable: true, type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['taskId', 'status', 'progress', 'step', 'operation', 'startedAt', 'updatedAt'],
+        },
+        TaskProgressSuccessResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            message: { type: 'string', example: 'Task progress fetched successfully' },
+            data: { $ref: '#/components/schemas/TaskProgress' },
+            meta: { $ref: '#/components/schemas/ResponseMeta' },
+          },
+          required: ['success', 'message', 'data', 'meta'],
+        },
+        AdminFailureReportListItem: {
+          type: 'object',
+          properties: {
+            fileName: { type: 'string' },
+            reportType: { type: 'string', example: 'request-failure' },
+            createdAt: { nullable: true, type: 'string', format: 'date-time' },
+            requestId: { nullable: true, type: 'string' },
+            taskId: { nullable: true, type: 'string' },
+            statusCode: { nullable: true, type: 'integer', example: 404 },
+            errorCode: { nullable: true, type: 'string', example: 'TASK_NOT_FOUND' },
+            message: { nullable: true, type: 'string' },
+            method: { nullable: true, type: 'string', example: 'GET' },
+            path: { nullable: true, type: 'string', example: '/api/tasks/abc' },
+            intentTask: { nullable: true, type: 'string', example: 'task_progress_lookup' },
+          },
+          required: ['fileName', 'reportType'],
+        },
+        AdminReportsListPayload: {
+          type: 'object',
+          properties: {
+            count: { type: 'integer', minimum: 0, example: 2 },
+            reports: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/AdminFailureReportListItem' },
+            },
+          },
+          required: ['count', 'reports'],
+        },
+        AdminReportsListSuccessResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            message: { type: 'string', example: 'Failure reports fetched successfully' },
+            data: { $ref: '#/components/schemas/AdminReportsListPayload' },
+            meta: { $ref: '#/components/schemas/ResponseMeta' },
+          },
+          required: ['success', 'message', 'data', 'meta'],
+        },
+        AdminReportDetailPayload: {
+          type: 'object',
+          properties: {
+            fileName: { type: 'string' },
+            report: { type: 'object', additionalProperties: true },
+          },
+          required: ['fileName', 'report'],
+        },
+        AdminReportDetailSuccessResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            message: { type: 'string', example: 'Failure report fetched successfully' },
+            data: { $ref: '#/components/schemas/AdminReportDetailPayload' },
+            meta: { $ref: '#/components/schemas/ResponseMeta' },
+          },
+          required: ['success', 'message', 'data', 'meta'],
         },
         HealthSuccessResponse: {
           type: 'object',

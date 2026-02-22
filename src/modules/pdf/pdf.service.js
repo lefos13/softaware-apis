@@ -1,11 +1,23 @@
 /**
  * Why this exists: merge behavior now supports explicit client merge plans
- * (order + rotation) so frontend preview decisions are applied server-side.
+ * plus per-step progress callbacks for real-time frontend tracking.
  */
 import { degrees, PDFDocument } from 'pdf-lib';
 import { ApiError } from '../../common/utils/api-error.js';
 
 const ALLOWED_ROTATIONS = new Set([0, 90, 180, 270]);
+
+const safeProgressUpdate = (onProgress, payload) => {
+  if (typeof onProgress !== 'function') {
+    return;
+  }
+
+  try {
+    onProgress(payload);
+  } catch {
+    // Progress callbacks are best-effort and should never interrupt file processing.
+  }
+};
 
 function normalizeMergePlan(mergePlan, fileCount) {
   if (!Array.isArray(mergePlan) || mergePlan.length === 0) {
@@ -74,17 +86,24 @@ function normalizeMergePlan(mergePlan, fileCount) {
   return normalized;
 }
 
-export async function mergePdfBuffers(files, mergePlan = []) {
+export async function mergePdfBuffers(files, mergePlan = [], onProgress) {
   if (!Array.isArray(files) || files.length < 2) {
     throw new ApiError(400, 'INVALID_INPUT', 'At least 2 PDF files are required', {
       details: [{ field: 'files', issue: 'Provide 2 or more PDF files' }],
     });
   }
 
+  safeProgressUpdate(onProgress, {
+    progress: 5,
+    step: 'Validating merge plan',
+    metadata: { totalFiles: files.length },
+  });
+
   const normalizedPlan = normalizeMergePlan(mergePlan, files.length);
   const merged = await PDFDocument.create();
 
-  for (const instruction of normalizedPlan) {
+  for (let index = 0; index < normalizedPlan.length; index += 1) {
+    const instruction = normalizedPlan[index];
     const file = files[instruction.sourceIndex];
 
     if (!file?.buffer || file.size === 0) {
@@ -105,6 +124,17 @@ export async function mergePdfBuffers(files, mergePlan = []) {
 
         merged.addPage(page);
       });
+
+      const ratio = (index + 1) / normalizedPlan.length;
+      safeProgressUpdate(onProgress, {
+        progress: Math.min(90, Math.round(10 + ratio * 78)),
+        step: `Merged file ${index + 1} of ${normalizedPlan.length}`,
+        metadata: {
+          currentFileIndex: index + 1,
+          totalFiles: normalizedPlan.length,
+          currentFileName: file.originalname,
+        },
+      });
     } catch {
       throw new ApiError(
         422,
@@ -119,11 +149,21 @@ export async function mergePdfBuffers(files, mergePlan = []) {
     }
   }
 
+  safeProgressUpdate(onProgress, {
+    progress: 95,
+    step: 'Finalizing merged PDF',
+  });
+
   const mergedBytes = await merged.save();
 
   if (!mergedBytes?.length) {
     throw new ApiError(500, 'PDF_MERGE_FAILED', 'Failed to generate merged PDF');
   }
+
+  safeProgressUpdate(onProgress, {
+    progress: 100,
+    step: 'Merged PDF generated',
+  });
 
   return mergedBytes;
 }

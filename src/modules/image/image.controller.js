@@ -1,9 +1,14 @@
 /**
- * Why this exists: controller validates mode/options payload and emits a
- * single ZIP download response for multi-image compression requests.
+ * Why this exists: controller validates mode/options payload, updates existing
+ * task progress, and emits a single ZIP download for multi-image compression.
  */
 import { ApiError } from '../../common/utils/api-error.js';
 import { buildResponseMeta } from '../../common/utils/api-response.js';
+import {
+  completeTaskProgress,
+  failTaskProgress,
+  updateTaskProgress,
+} from '../../common/services/task-progress-store.js';
 import { env } from '../../config/env.js';
 import { compressImageBuffers } from './image.service.js';
 
@@ -23,6 +28,8 @@ function parseAdvancedOptions(rawAdvancedOptions) {
 }
 
 export async function compressImagesController(req, res, next) {
+  const taskId = req.taskId;
+
   try {
     const files = req.files;
 
@@ -31,6 +38,14 @@ export async function compressImagesController(req, res, next) {
         details: [{ field: 'files', issue: 'At least one image file is required' }],
       });
     }
+
+    const mode = String(req.body?.mode || 'balanced').toLowerCase();
+
+    updateTaskProgress(taskId, {
+      progress: 4,
+      step: 'Upload received, validating payload',
+      metadata: { totalFiles: files.length, mode },
+    });
 
     const totalBytes = files.reduce((sum, file) => sum + (file.size || 0), 0);
     if (totalBytes > env.maxTotalUploadBytes) {
@@ -43,8 +58,6 @@ export async function compressImagesController(req, res, next) {
         ],
       });
     }
-
-    const mode = String(req.body?.mode || 'balanced').toLowerCase();
 
     let advancedOptions = {};
 
@@ -60,7 +73,16 @@ export async function compressImagesController(req, res, next) {
       throw error;
     }
 
-    const compressedZip = await compressImageBuffers(files, { mode, advancedOptions });
+    const compressedZip = await compressImageBuffers(
+      files,
+      { mode, advancedOptions },
+      (progressUpdate) => {
+        updateTaskProgress(taskId, progressUpdate);
+      },
+    );
+
+    completeTaskProgress(taskId, 'Compressed ZIP ready for download');
+
     const outputName = `compressed-images-${Date.now()}.zip`;
 
     buildResponseMeta(req, res);
@@ -71,6 +93,11 @@ export async function compressImagesController(req, res, next) {
 
     res.status(200).send(Buffer.from(compressedZip));
   } catch (error) {
+    failTaskProgress(taskId, {
+      code: error?.code,
+      message: error?.message,
+      step: 'Image compression failed',
+    });
     next(error);
   }
 }

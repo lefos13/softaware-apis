@@ -1,6 +1,6 @@
 /**
  * Why this exists: image compression supports both simple preset modes and
- * advanced tuning while always returning a single ZIP artifact for multi-file UX.
+ * advanced tuning while emitting real progress updates for frontend polling.
  */
 import { PassThrough } from 'node:stream';
 import archiver from 'archiver';
@@ -15,6 +15,18 @@ const PRESET_CONFIGS = {
 
 const ALLOWED_MODES = new Set(['light', 'balanced', 'aggressive', 'advanced']);
 const ALLOWED_FORMATS = new Set(['jpeg', 'png', 'webp', 'avif']);
+
+const safeProgressUpdate = (onProgress, payload) => {
+  if (typeof onProgress !== 'function') {
+    return;
+  }
+
+  try {
+    onProgress(payload);
+  } catch {
+    // Progress callbacks are best-effort and should never interrupt file processing.
+  }
+};
 
 const toPositiveInt = (value) => {
   const parsed = Number.parseInt(value, 10);
@@ -220,7 +232,7 @@ async function compressSingleImage(file, options) {
   }
 }
 
-async function createZipFromEntries(entries) {
+async function createZipFromEntries(entries, onProgress) {
   return new Promise((resolve, reject) => {
     const zipChunks = [];
     const passThrough = new PassThrough();
@@ -240,6 +252,21 @@ async function createZipFromEntries(entries) {
     });
 
     const archive = archiver('zip', { zlib: { level: 9 } });
+
+    archive.on('progress', (event) => {
+      const total = event?.entries?.total || entries.length;
+      const processed = event?.entries?.processed || 0;
+      const ratio = total > 0 ? processed / total : 0;
+
+      safeProgressUpdate(onProgress, {
+        progress: Math.min(98, Math.round(88 + ratio * 10)),
+        step: 'Packaging compressed files',
+        metadata: {
+          archivedFiles: processed,
+          totalFiles: total,
+        },
+      });
+    });
 
     archive.on('error', () => {
       reject(
@@ -264,6 +291,7 @@ async function createZipFromEntries(entries) {
 export async function compressImageBuffers(
   files,
   { mode = 'balanced', advancedOptions = {} } = {},
+  onProgress,
 ) {
   if (!Array.isArray(files) || files.length === 0) {
     throw new ApiError(400, 'INVALID_INPUT', 'Upload at least one image file in field "files"', {
@@ -271,15 +299,38 @@ export async function compressImageBuffers(
     });
   }
 
+  safeProgressUpdate(onProgress, {
+    progress: 5,
+    step: 'Validating compression options',
+    metadata: { totalFiles: files.length },
+  });
+
   const compressionOptions = normalizeCompressionOptions(mode, advancedOptions);
   const compressedEntries = [];
 
-  for (const file of files) {
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index];
     const compressed = await compressSingleImage(file, compressionOptions);
     compressedEntries.push(compressed);
+
+    const ratio = (index + 1) / files.length;
+    safeProgressUpdate(onProgress, {
+      progress: Math.min(85, Math.round(12 + ratio * 72)),
+      step: `Compressed image ${index + 1} of ${files.length}`,
+      metadata: {
+        currentFileIndex: index + 1,
+        totalFiles: files.length,
+        currentFileName: file.originalname,
+      },
+    });
   }
 
-  const zipBuffer = await createZipFromEntries(compressedEntries);
+  safeProgressUpdate(onProgress, {
+    progress: 90,
+    step: 'Creating download archive',
+  });
+
+  const zipBuffer = await createZipFromEntries(compressedEntries, onProgress);
 
   if (!zipBuffer?.length) {
     throw new ApiError(
@@ -288,6 +339,11 @@ export async function compressImageBuffers(
       'Failed to generate compressed image archive',
     );
   }
+
+  safeProgressUpdate(onProgress, {
+    progress: 100,
+    step: 'Compressed archive generated',
+  });
 
   return zipBuffer;
 }

@@ -184,6 +184,42 @@ Rules:
 - `effort`: integer from `0` to `9`
 - `lossless`: boolean (primarily useful for `webp`)
 
+### Task Progress (real processing tracking)
+
+- `GET /api/tasks/:taskId`
+- Returns real backend progress for currently running/completed/failed tasks.
+- If task is not found yet, backend returns an initializing payload (`status=running`, `progress=0`) instead of `404`.
+- Use the same `taskId` you send in query param `?taskId=...` when calling:
+  - `POST /api/pdf/merge`
+  - `POST /api/image/compress`
+
+Example:
+
+```bash
+curl http://localhost:3000/api/tasks/8c9e7afb-573e-4d34-b6ef-8f0d03f518d6
+```
+
+### Admin Failure Reports
+
+- `GET /api/admin/reports?limit=100`
+- Lists recent JSON reports created under `logs/failures` by error middleware.
+- `limit` is optional (`1..500`, default `100`).
+
+Example:
+
+```bash
+curl "http://localhost:3000/api/admin/reports?limit=50"
+```
+
+- `GET /api/admin/reports/:fileName`
+- Returns one full report payload by file name.
+
+Example:
+
+```bash
+curl "http://localhost:3000/api/admin/reports/2026-02-21T18-25-27-318Z-f826f546-624e-4e34-be82-c588bc90a09d.json"
+```
+
 ## Response contract for frontend messaging
 
 Why this was added: frontend needs consistent message + metadata fields to show
@@ -224,6 +260,7 @@ Binary file endpoints (like PDF merge) additionally include headers:
 
 - `X-Operation-Message`: user-friendly success message.
 - `X-Request-Id`: request correlation id.
+- `X-Task-Id`: resolved task id for polling `/api/tasks/:taskId`.
 
 ### PDF merge error codes to handle in frontend
 
@@ -252,6 +289,15 @@ Binary file endpoints (like PDF merge) additionally include headers:
 - `UNEXPECTED_FILE_FIELD`: multipart field is not `files`.
 - `ZIP_ARCHIVE_FAILED`: server failed to build output ZIP.
 - `INTERNAL_SERVER_ERROR`: unhandled backend failure.
+
+## Failure reports
+
+Why this was added: every failed API request now writes a detailed failure report
+that can be reviewed for debugging and support.
+
+- Output directory: `logs/failures/`
+- Report format: JSON (one file per failed request)
+- Includes: request id, task id (if present), intended operation summary, request context, normalized error details.
 
 ## Suggested roadmap for your portal services
 
