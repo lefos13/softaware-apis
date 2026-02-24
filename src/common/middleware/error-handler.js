@@ -78,6 +78,25 @@ const summarizeTaskIntent = (req) => {
     };
   }
 
+  if (req.originalUrl?.startsWith('/api/pdf/split')) {
+    return {
+      task: 'pdf_split',
+      expectedOutcome: 'Generate one ZIP containing split PDF outputs',
+      fileCount: Array.isArray(req.files) ? req.files.length : 0,
+      mode: req.body?.mode || null,
+      splitOptionsProvided: Boolean(req.body?.splitOptions),
+    };
+  }
+
+  if (req.originalUrl?.startsWith('/api/pdf/extract-to-docx')) {
+    return {
+      task: 'pdf_extract_docx',
+      expectedOutcome: 'Generate one DOCX with extracted native and OCR text from uploaded PDF',
+      fileCount: Array.isArray(req.files) ? req.files.length : 0,
+      extractOptionsProvided: Boolean(req.body?.extractOptions),
+    };
+  }
+
   if (req.originalUrl?.startsWith('/api/image/compress')) {
     return {
       task: 'image_compress',
@@ -85,6 +104,26 @@ const summarizeTaskIntent = (req) => {
       fileCount: Array.isArray(req.files) ? req.files.length : 0,
       mode: req.body?.mode || 'balanced',
       advancedOptionsProvided: Boolean(req.body?.advancedOptions),
+    };
+  }
+
+  if (req.originalUrl?.startsWith('/api/image/convert-preview')) {
+    return {
+      task: 'image_convert_preview',
+      expectedOutcome: 'Generate one converted image preview',
+      fileCount: Array.isArray(req.files) ? req.files.length : 0,
+      targetFormat: req.body?.targetFormat || null,
+      conversionOptionsProvided: Boolean(req.body?.conversionOptions),
+    };
+  }
+
+  if (req.originalUrl?.startsWith('/api/image/convert')) {
+    return {
+      task: 'image_convert',
+      expectedOutcome: 'Generate one ZIP containing converted images',
+      fileCount: Array.isArray(req.files) ? req.files.length : 0,
+      targetFormat: req.body?.targetFormat || null,
+      conversionOptionsProvided: Boolean(req.body?.conversionOptions),
     };
   }
 
@@ -118,7 +157,15 @@ const safeBodySnapshot = (body) => {
     return null;
   }
 
-  const allowedKeys = ['mode', 'mergePlan', 'advancedOptions'];
+  const allowedKeys = [
+    'mode',
+    'mergePlan',
+    'splitOptions',
+    'extractOptions',
+    'advancedOptions',
+    'targetFormat',
+    'conversionOptions',
+  ];
   const snapshot = {};
 
   allowedKeys.forEach((key) => {

@@ -11,6 +11,24 @@ const asInt = (value, fallback) => {
   return Number.isNaN(parsed) ? fallback : parsed;
 };
 
+const asBool = (value, fallback) => {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+
+  if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) {
+    return true;
+  }
+
+  if (['false', '0', 'no', 'n', 'off'].includes(normalized)) {
+    return false;
+  }
+
+  return fallback;
+};
+
 const port = asInt(process.env.PORT, 3000);
 
 export const env = {
@@ -21,4 +39,5 @@ export const env = {
   maxUploadFiles: asInt(process.env.MAX_UPLOAD_FILES, 20),
   maxFileSizeBytes: asInt(process.env.MAX_FILE_SIZE_MB, 25) * 1024 * 1024,
   maxTotalUploadBytes: asInt(process.env.MAX_TOTAL_UPLOAD_MB, 120) * 1024 * 1024,
+  pdfExtractToDocxEnabled: asBool(process.env.PDF_EXTRACT_TO_DOCX_ENABLED, true),
 };

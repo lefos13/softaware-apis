@@ -5,7 +5,11 @@
   "main": "src/server.js",
   "type": "module",
   "scripts": {
+    "runtime:check": "node src/scripts/ensure-ocr-runtime.js",
+    "runtime:install": "node src/scripts/ensure-ocr-runtime.js --install",
+    "predev": "npm run runtime:check",
     "dev": "nodemon src/server.js",
+    "prestart": "npm run runtime:check",
     "start": "node src/server.js",
     "check": "node --check src/server.js",
     "openapi:export": "node src/scripts/export-openapi.js",
@@ -29,12 +33,14 @@
   "dependencies": {
     "archiver": "^7.0.1",
     "cors": "^2.8.5",
+    "docx": "^9.5.3",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "helmet": "^8.0.0",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^5.4.624",
     "sharp": "^0.34.5",
     "swagger-ui-express": "^5.0.1"
   },

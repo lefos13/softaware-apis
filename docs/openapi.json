@@ -21,7 +21,7 @@
     },
     {
       "name": "Image",
-      "description": "Image compression endpoints."
+      "description": "Image compression and format-conversion endpoints."
     },
     {
       "name": "Tasks",
@@ -166,8 +166,301 @@
               }
             }
           },
+          "415": {
+            "description": "Uploaded file type is not supported",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Uploaded file content is not a valid PDF",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pdf/split": {
+      "post": {
+        "tags": [
+          "PDF"
+        ],
+        "summary": "Split a single PDF into multiple PDFs",
+        "description": "Upload exactly one PDF in `files`, select split `mode` and `splitOptions`, and receive a ZIP archive containing split PDFs. Limits: 20 files, 25 MB each, 120 MB total.",
+        "operationId": "splitPdf",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional client-provided task id used for progress polling. If omitted, backend generates one."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "minItems": 1,
+                    "maxItems": 1
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "range",
+                      "selected_pages",
+                      "every_n_pages",
+                      "custom_groups"
+                    ],
+                    "description": "Split strategy to apply to the uploaded PDF."
+                  },
+                  "splitOptions": {
+                    "type": "string",
+                    "description": "JSON string. Examples: {\"fromPage\":3,\"toPage\":12} (range), {\"pages\":[1,5,10]} (selected_pages), {\"chunkSize\":4} (every_n_pages), {\"groups\":[{\"name\":\"intro\",\"ranges\":[\"1-3\"],\"pages\":[8]}]} (custom_groups)."
+                  }
+                },
+                "required": [
+                  "files",
+                  "mode",
+                  "splitOptions"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "ZIP archive containing split PDFs",
+            "headers": {
+              "X-Operation-Message": {
+                "description": "User-friendly success message for UI notifications",
+                "schema": {
+                  "type": "string",
+                  "example": "PDF split completed successfully"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Request correlation id for support/debugging",
+                "schema": {
+                  "type": "string",
+                  "example": "2d5e4c95-cf21-4b2d-8710-8a77a66cc2d8"
+                }
+              },
+              "X-Task-Id": {
+                "description": "Resolved task id (from query/header/generated) that can be used to poll `/api/tasks/{taskId}` progress",
+                "schema": {
+                  "type": "string",
+                  "example": "8c9e7afb-573e-4d34-b6ef-8f0d03f518d6"
+                }
+              }
+            },
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Upload exceeds per-file or total-size constraints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Uploaded file type is not supported",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Uploaded file content is not a valid PDF",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pdf/extract-to-docx": {
+      "post": {
+        "tags": [
+          "PDF"
+        ],
+        "summary": "Extract PDF text to Word (.docx) with OCR fallback for scanned pages",
+        "description": "Upload exactly one PDF in `files` plus required `extractOptions` JSON. The API extracts native text and automatically runs OCR for pages with low native text. Use `processingProfile` (`fast`, `quality`, `maximum`, `ultra`) to control OCR effort. Limits: 20 files, 25 MB each, 120 MB total.",
+        "operationId": "extractPdfToDocx",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional client-provided task id used for progress polling. If omitted, backend generates one."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "minItems": 1,
+                    "maxItems": 1
+                  },
+                  "extractOptions": {
+                    "type": "string",
+                    "description": "JSON string. Example: {\"ocrMode\":\"hybrid\",\"languages\":[\"eng\",\"ell\"],\"processingProfile\":\"ultra\",\"includePageBreaks\":true,\"includeConfidenceMarkers\":false}."
+                  }
+                },
+                "required": [
+                  "files",
+                  "extractOptions"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Word document containing extracted text",
+            "headers": {
+              "X-Operation-Message": {
+                "description": "User-friendly success message for UI notifications",
+                "schema": {
+                  "type": "string",
+                  "example": "PDF text extracted to Word successfully"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Request correlation id for support/debugging",
+                "schema": {
+                  "type": "string",
+                  "example": "2d5e4c95-cf21-4b2d-8710-8a77a66cc2d8"
+                }
+              },
+              "X-Task-Id": {
+                "description": "Resolved task id (from query/header/generated) that can be used to poll `/api/tasks/{taskId}` progress",
+                "schema": {
+                  "type": "string",
+                  "example": "8c9e7afb-573e-4d34-b6ef-8f0d03f518d6"
+                }
+              }
+            },
+            "content": {
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Upload exceeds per-file or total-size constraints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Uploaded file type is not supported",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "PDF parsing, OCR, or DOCX generation failed",
             "content": {
               "application/json": {
                 "schema": {
@@ -323,13 +616,287 @@
         }
       }
     },
+    "/api/image/convert": {
+      "post": {
+        "tags": [
+          "Image"
+        ],
+        "summary": "Convert one or more images to a target format",
+        "description": "Upload images in `files`, set `targetFormat`, and receive a ZIP file with converted results. Automatic/picker-seeded transparent background removal is available for alpha-capable output formats (png/webp/avif/tiff/gif) and requires exactly one image per request. Limits: 20 files, 25 MB each, 120 MB total.",
+        "operationId": "convertImages",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional client-provided task id used for progress polling. If omitted, backend generates one."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "minItems": 1
+                  },
+                  "targetFormat": {
+                    "type": "string",
+                    "enum": [
+                      "jpeg",
+                      "png",
+                      "webp",
+                      "avif",
+                      "tiff",
+                      "gif"
+                    ],
+                    "description": "Desired output format applied to all uploaded images."
+                  },
+                  "conversionOptions": {
+                    "type": "string",
+                    "description": "Optional JSON string. Example: {\"quality\":82,\"effort\":5,\"lossless\":false,\"transparentBackground\":true,\"backgroundDetectionMode\":\"auto\",\"colorTolerance\":32} or picker mode {\"transparentBackground\":true,\"backgroundDetectionMode\":\"picker\",\"pickerPoints\":[{\"x\":0.1,\"y\":0.2},{\"x\":0.15,\"y\":0.25}],\"colorTolerance\":32}"
+                  }
+                },
+                "required": [
+                  "files",
+                  "targetFormat"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "ZIP archive containing converted images",
+            "headers": {
+              "X-Operation-Message": {
+                "description": "User-friendly success message for UI notifications",
+                "schema": {
+                  "type": "string",
+                  "example": "Images converted successfully"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Request correlation id for support/debugging",
+                "schema": {
+                  "type": "string",
+                  "example": "2d5e4c95-cf21-4b2d-8710-8a77a66cc2d8"
+                }
+              },
+              "X-Task-Id": {
+                "description": "Resolved task id (from query/header/generated) that can be used to poll `/api/tasks/{taskId}` progress",
+                "schema": {
+                  "type": "string",
+                  "example": "8c9e7afb-573e-4d34-b6ef-8f0d03f518d6"
+                }
+              }
+            },
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Upload exceeds per-file or total-size constraints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Uploaded file content is not a valid image",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/image/convert-preview": {
+      "post": {
+        "tags": [
+          "Image"
+        ],
+        "summary": "Convert one image and return a direct preview file",
+        "description": "Single-image conversion endpoint intended for UX preview flows. Returns one converted image binary instead of ZIP and supports the same conversionOptions as `/api/image/convert`.",
+        "operationId": "convertImagePreview",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional client-provided task id used for progress polling. If omitted, backend generates one."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "minItems": 1,
+                    "maxItems": 1
+                  },
+                  "targetFormat": {
+                    "type": "string",
+                    "enum": [
+                      "jpeg",
+                      "png",
+                      "webp",
+                      "avif",
+                      "tiff",
+                      "gif"
+                    ]
+                  },
+                  "conversionOptions": {
+                    "type": "string",
+                    "description": "Optional JSON string. Example: {\"quality\":82,\"effort\":5,\"lossless\":false,\"transparentBackground\":true,\"backgroundDetectionMode\":\"picker\",\"pickerPoints\":[{\"x\":0.1,\"y\":0.2}],\"colorTolerance\":32}"
+                  }
+                },
+                "required": [
+                  "files",
+                  "targetFormat"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Converted image preview",
+            "headers": {
+              "X-Operation-Message": {
+                "description": "User-friendly success message for UI notifications",
+                "schema": {
+                  "type": "string",
+                  "example": "Image preview generated successfully"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Request correlation id for support/debugging",
+                "schema": {
+                  "type": "string",
+                  "example": "2d5e4c95-cf21-4b2d-8710-8a77a66cc2d8"
+                }
+              },
+              "X-Task-Id": {
+                "description": "Resolved task id (from query/header/generated) that can be used to poll `/api/tasks/{taskId}` progress",
+                "schema": {
+                  "type": "string",
+                  "example": "8c9e7afb-573e-4d34-b6ef-8f0d03f518d6"
+                }
+              }
+            },
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Upload exceeds per-file or total-size constraints",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Uploaded file content is not a valid image",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tasks/{taskId}": {
       "get": {
         "tags": [
           "Tasks"
         ],
         "summary": "Get task progress by task id",
-        "description": "Returns real backend processing progress for PDF merge/image compression tasks. If task is not found yet, the response returns an initializing payload.",
+        "description": "Returns real backend processing progress for PDF merge/PDF split/PDF extract-to-DOCX/image compression/image conversion/image preview conversion tasks. If task is not found yet, the response returns an initializing payload.",
         "operationId": "getTaskProgress",
         "parameters": [
           {
@@ -587,6 +1154,63 @@
         "required": [
           "sourceIndex",
           "rotation"
+        ]
+      },
+      "PdfExtractOptions": {
+        "type": "object",
+        "properties": {
+          "ocrMode": {
+            "type": "string",
+            "enum": [
+              "hybrid"
+            ],
+            "example": "hybrid"
+          },
+          "languages": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "eng",
+                "ell"
+              ]
+            },
+            "example": [
+              "eng",
+              "ell"
+            ]
+          },
+          "processingProfile": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "quality",
+              "maximum",
+              "ultra"
+            ],
+            "example": "ultra"
+          },
+          "includePageBreaks": {
+            "type": "boolean",
+            "example": true
+          },
+          "includeConfidenceMarkers": {
+            "type": "boolean",
+            "example": false
+          },
+          "minNativeCharsPerPage": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5000,
+            "example": 96
+          }
+        },
+        "required": [
+          "ocrMode",
+          "languages",
+          "processingProfile",
+          "includePageBreaks",
+          "includeConfidenceMarkers"
         ]
       },
       "CompressionAdvancedOptions": {

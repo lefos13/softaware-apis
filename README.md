@@ -18,16 +18,42 @@ This keeps the project simple now, while making it easy to split heavy tasks int
    ```bash
    npm install
    ```
-2. Create env file:
+2. Install required OCR runtime dependencies:
+   ```bash
+   npm run runtime:install
+   ```
+3. Create env file:
    ```bash
    cp .env.example .env
    ```
-3. Run dev server:
+4. Run dev server:
    ```bash
    npm run dev
    ```
 
 Server default: `http://localhost:3000`
+
+## OCR runtime dependencies (PDF -> Word extraction)
+
+Why this was added: hybrid text extraction needs native OCR tooling for scanned/photo PDFs.
+
+Required system binaries:
+
+- `tesseract` (with language packs `eng` and `ell`)
+- `pdftoppm` (Poppler)
+
+Runtime setup/check commands:
+
+- `npm run runtime:install` attempts to install OCR dependencies automatically:
+  - macOS (Homebrew): `brew install tesseract poppler tesseract-lang`
+  - Linux (APT): `sudo apt-get update && sudo apt-get install -y tesseract-ocr tesseract-ocr-ell poppler-utils`
+- `npm run runtime:check` verifies binaries and language packs (`eng`, `ell`).
+- `npm run dev` and `npm run start` now run `runtime:check` first and fail fast if OCR runtime is missing.
+
+Feature flag:
+
+- `PDF_EXTRACT_TO_DOCX_ENABLED=true` (default)
+- Set to `false` to disable `POST /api/pdf/extract-to-docx`
 
 ## Code quality workflow (ESLint, Prettier, Husky)
 
@@ -142,12 +168,102 @@ Rules:
 - `sourceIndex` points to the index in uploaded `files` array.
 - `rotation` must be one of `0`, `90`, `180`, `270`.
 
+### Split PDF
+
+- `POST /api/pdf/split`
+- `Content-Type: multipart/form-data`
+- File field: `files` (must include exactly 1 PDF)
+- Required `mode` values: `range`, `selected_pages`, `every_n_pages`, `custom_groups`
+- Required `splitOptions` (JSON string), shape depends on mode
+- Upload limits (default): max `20` files, max `25 MB` per file, max `120 MB` total request size.
+- Response: one ZIP containing generated split PDFs
+
+Examples:
+
+```bash
+curl -X POST http://localhost:3000/api/pdf/split \
+  -F "files=@/absolute/path/report.pdf" \
+  -F "mode=range" \
+  -F 'splitOptions={"fromPage":3,"toPage":12}' \
+  --output split-output.zip
+```
+
+```bash
+curl -X POST http://localhost:3000/api/pdf/split \
+  -F "files=@/absolute/path/report.pdf" \
+  -F "mode=selected_pages" \
+  -F 'splitOptions={"pages":[1,5,10]}' \
+  --output split-output.zip
+```
+
+```bash
+curl -X POST http://localhost:3000/api/pdf/split \
+  -F "files=@/absolute/path/report.pdf" \
+  -F "mode=every_n_pages" \
+  -F 'splitOptions={"chunkSize":4}' \
+  --output split-output.zip
+```
+
+```bash
+curl -X POST http://localhost:3000/api/pdf/split \
+  -F "files=@/absolute/path/report.pdf" \
+  -F "mode=custom_groups" \
+  -F 'splitOptions={"groups":[{"name":"intro","ranges":["1-3"],"pages":[8]},{"name":"appendix","ranges":["20-25"]}]}' \
+  --output split-output.zip
+```
+
+Rules:
+
+- Page numbers are 1-based.
+- `selected_pages` creates one combined PDF containing selected pages in provided order (deduped).
+- `every_n_pages` creates chunk PDFs where each chunk has up to `chunkSize` pages.
+- `custom_groups` creates one PDF per group from ranges/pages with deduped pages per group.
+- `custom_groups` supports up to `100` groups.
+
+### Extract PDF text to Word (OCR hybrid)
+
+- `POST /api/pdf/extract-to-docx`
+- `Content-Type: multipart/form-data`
+- File field: `files` (must include exactly 1 PDF)
+- Required field: `extractOptions` (JSON string)
+- Response: one `.docx` file (direct download)
+- Upload limits (default): max `20` files, max `25 MB` per file, max `120 MB` total request size.
+
+Example:
+
+```bash
+curl -X POST http://localhost:3000/api/pdf/extract-to-docx \
+  -F "files=@/absolute/path/scanned-or-native.pdf" \
+  -F 'extractOptions={"ocrMode":"hybrid","languages":["eng","ell"],"processingProfile":"ultra","includePageBreaks":true,"includeConfidenceMarkers":false}' \
+  --output extracted.docx
+```
+
+`extractOptions` shape:
+
+```json
+{
+  "ocrMode": "hybrid",
+  "languages": ["eng", "ell"],
+  "processingProfile": "ultra",
+  "includePageBreaks": true,
+  "includeConfidenceMarkers": false
+}
+```
+
+Rules and limitations:
+
+- Native text extraction runs first; OCR is applied per page when native text is below threshold.
+- Supported OCR languages in v1 are `eng` (English), `ell` (Greek), or both.
+- OCR quality profile can be `fast` (quick), `quality` (improved), `maximum` (high effort), or `ultra` (best available effort).
+- Output is text-first DOCX (not full visual layout recreation).
+- Handwriting accuracy is not guaranteed.
+
 ### Compress Images
 
 - `POST /api/image/compress`
 - `Content-Type: multipart/form-data`
 - File field: `files` (must include at least 1 supported image)
-- Supported formats: `jpeg`, `png`, `webp`, `avif`
+- Supported upload formats: `jpeg`, `png`, `webp`, `avif`, `gif`, `tiff`
 - Upload limits (default): max `20` files, max `25 MB` per file, max `120 MB` total request size.
 - `mode` values: `light`, `balanced`, `aggressive`, `advanced`
 - Optional `advancedOptions` (JSON string, required only for `mode=advanced`)
@@ -184,6 +300,66 @@ Rules:
 - `effort`: integer from `0` to `9`
 - `lossless`: boolean (primarily useful for `webp`)
 
+### Convert Image Formats
+
+- `POST /api/image/convert`
+- `Content-Type: multipart/form-data`
+- File field: `files` (must include at least 1 supported image)
+- Supported upload formats: `jpeg`, `png`, `webp`, `avif`, `gif`, `tiff`
+- Upload limits (default): max `20` files, max `25 MB` per file, max `120 MB` total request size.
+- Required field: `targetFormat`
+- `targetFormat` values: `jpeg`, `png`, `webp`, `avif`, `tiff`, `gif`
+- Optional `conversionOptions` (JSON string)
+- Optional transparent background removal is available for alpha-capable targets (`png`, `webp`, `avif`, `tiff`, `gif`)
+- Transparent background mode requires exactly one uploaded file per request
+
+Example:
+
+```bash
+curl -X POST http://localhost:3000/api/image/convert \
+  -F "files=@/absolute/path/photo-1.jpg" \
+  -F "targetFormat=png" \
+  -F 'conversionOptions={"quality":82,"effort":5,"lossless":false,"transparentBackground":true,"backgroundDetectionMode":"auto","colorTolerance":32}' \
+  --output converted-images.zip
+```
+
+Conversion options shape:
+
+```json
+{
+  "quality": 82,
+  "effort": 5,
+  "lossless": false,
+  "transparentBackground": true,
+  "backgroundDetectionMode": "auto",
+  "pickerPoints": [
+    { "x": 0.12, "y": 0.18 },
+    { "x": 0.09, "y": 0.24 }
+  ],
+  "colorTolerance": 32
+}
+```
+
+Rules:
+
+- `quality`: optional integer from `1` to `100`
+- `effort`: optional integer from `0` to `9`
+- `lossless`: optional boolean (mainly useful for `webp`/`tiff`)
+- `transparentBackground`: optional boolean, enables connected-region transparency removal
+- `backgroundDetectionMode`: optional `auto` (default) or `picker`
+- `pickerPoints`: optional array of points (`{x,y}`) with values in range `0..1`, required for `backgroundDetectionMode=picker`
+- Up to `30` picker points are allowed
+- `colorTolerance`: optional integer from `0` to `255`, default `32`
+- `transparentBackground` requires alpha-capable output: `png`, `webp`, `avif`, `tiff`, or `gif`
+- `transparentBackground` requires exactly one file in the request
+
+### Convert Image Preview (for UX before/after preview)
+
+- `POST /api/image/convert-preview`
+- Same payload as `POST /api/image/convert`, but `files` must contain exactly one image
+- Returns a direct converted image binary (`image/*`) instead of ZIP
+- Intended for live preview UIs (for example transparent background preview before final download)
+
 ### Task Progress (real processing tracking)
 
 - `GET /api/tasks/:taskId`
@@ -191,7 +367,10 @@ Rules:
 - If task is not found yet, backend returns an initializing payload (`status=running`, `progress=0`) instead of `404`.
 - Use the same `taskId` you send in query param `?taskId=...` when calling:
   - `POST /api/pdf/merge`
+  - `POST /api/pdf/split`
   - `POST /api/image/compress`
+  - `POST /api/image/convert`
+  - `POST /api/image/convert-preview`
 
 Example:
 
@@ -275,6 +454,23 @@ Binary file endpoints (like PDF merge) additionally include headers:
 - `UNEXPECTED_FILE_FIELD`: multipart field is not `files`.
 - `INTERNAL_SERVER_ERROR`: unhandled backend failure.
 
+### PDF split error codes to handle in frontend
+
+- `INVALID_INPUT`: missing/invalid files payload.
+- `INVALID_SPLIT_MODE`: mode is not one of supported values.
+- `INVALID_SPLIT_OPTIONS`: split options JSON/options are missing or invalid.
+- `INVALID_PAGE_REFERENCE`: page number/range is outside source PDF page bounds.
+- `INVALID_FILE_TYPE`: non-PDF upload.
+- `EMPTY_FILE`: uploaded file is empty.
+- `INVALID_PDF_CONTENT`: file cannot be parsed as valid PDF.
+- `FILE_TOO_LARGE`: uploaded file exceeds configured size limit.
+- `TOTAL_UPLOAD_TOO_LARGE`: combined upload size exceeds configured total limit.
+- `TOO_MANY_FILES`: uploaded file count exceeds configured limit.
+- `UNEXPECTED_FILE_FIELD`: multipart field is not `files`.
+- `ZIP_ARCHIVE_FAILED`: server failed to build output ZIP.
+- `PDF_SPLIT_FAILED`: server failed to build split archive.
+- `INTERNAL_SERVER_ERROR`: unhandled backend failure.
+
 ### Image compression error codes to handle in frontend
 
 - `INVALID_INPUT`: missing/invalid files payload.
@@ -288,6 +484,23 @@ Binary file endpoints (like PDF merge) additionally include headers:
 - `TOO_MANY_FILES`: uploaded file count exceeds configured limit.
 - `UNEXPECTED_FILE_FIELD`: multipart field is not `files`.
 - `ZIP_ARCHIVE_FAILED`: server failed to build output ZIP.
+- `INTERNAL_SERVER_ERROR`: unhandled backend failure.
+
+### Image conversion error codes to handle in frontend
+
+- `INVALID_INPUT`: missing/invalid files payload.
+- `INVALID_TARGET_FORMAT`: target format is missing or unsupported.
+- `INVALID_CONVERSION_OPTIONS`: conversion options JSON/options are invalid.
+- `INVALID_FILE_TYPE`: upload contains unsupported image type.
+- `EMPTY_FILE`: one or more uploaded images are empty.
+- `INVALID_IMAGE_CONTENT`: file could not be processed as image.
+- `FILE_TOO_LARGE`: uploaded file exceeds configured size limit.
+- `TOTAL_UPLOAD_TOO_LARGE`: combined upload size exceeds configured total limit.
+- `TOO_MANY_FILES`: uploaded file count exceeds configured limit.
+- `UNEXPECTED_FILE_FIELD`: multipart field is not `files`.
+- `ZIP_ARCHIVE_FAILED`: server failed to build output ZIP.
+- `IMAGE_CONVERSION_FAILED`: server failed to build conversion ZIP.
+- `TRANSPARENT_BACKGROUND_SINGLE_FILE_ONLY`: transparent mode was requested with multiple files.
 - `INTERNAL_SERVER_ERROR`: unhandled backend failure.
 
 ## Failure reports

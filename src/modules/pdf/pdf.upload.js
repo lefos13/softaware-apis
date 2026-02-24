@@ -14,7 +14,9 @@ const fileFilter = (_req, file, cb) => {
     typeof file.originalname === 'string' && file.originalname.toLowerCase().endsWith('.pdf');
 
   if (!isPdfMime && !isPdfName) {
-    return cb(new ApiError(400, 'INVALID_FILE_TYPE', 'Only PDF files are allowed'));
+    return cb(
+      new ApiError(415, 'UNSUPPORTED_FILE_TYPE', 'Only PDF files are allowed for this endpoint'),
+    );
   }
 
   cb(null, true);
