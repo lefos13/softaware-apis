@@ -2,6 +2,7 @@
  * Why this exists: centralized normalization ensures upload/parser/service
  * failures produce safe payloads, task-state failures, and forensic reports.
  */
+import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import multer from 'multer';
@@ -97,6 +98,50 @@ const summarizeTaskIntent = (req) => {
     };
   }
 
+  if (req.originalUrl?.startsWith('/api/pdf/watermark')) {
+    return {
+      task: 'pdf_watermark',
+      expectedOutcome: 'Generate one PDF with watermark text/image overlays',
+      fileCount: Array.isArray(req.files) ? req.files.length : 0,
+      watermarkOptionsProvided: Boolean(req.body?.watermarkOptions),
+    };
+  }
+
+  if (req.originalUrl?.startsWith('/api/pdf/page-numbers')) {
+    return {
+      task: 'pdf_page_numbers',
+      expectedOutcome: 'Generate one PDF with page numbers or Bates numbering',
+      fileCount: Array.isArray(req.files) ? req.files.length : 0,
+      pageNumberOptionsProvided: Boolean(req.body?.pageNumberOptions),
+    };
+  }
+
+  if (req.originalUrl?.startsWith('/api/pdf/edit-pages')) {
+    return {
+      task: 'pdf_edit_pages',
+      expectedOutcome: 'Generate one PDF with edited page order/rotation/selection',
+      fileCount: Array.isArray(req.files) ? req.files.length : 0,
+      editPlanProvided: Boolean(req.body?.editPlan),
+    };
+  }
+
+  if (req.originalUrl?.startsWith('/api/pdf/extract-text')) {
+    return {
+      task: 'pdf_extract_text',
+      expectedOutcome: 'Generate TXT or ZIP output with extracted PDF text',
+      fileCount: Array.isArray(req.files) ? req.files.length : 0,
+      textExtractOptionsProvided: Boolean(req.body?.textExtractOptions),
+    };
+  }
+
+  if (req.originalUrl?.startsWith('/api/pdf/from-images')) {
+    return {
+      task: 'pdf_from_images',
+      expectedOutcome: 'Generate one PDF where each uploaded image becomes a page',
+      fileCount: Array.isArray(req.files) ? req.files.length : 0,
+    };
+  }
+
   if (req.originalUrl?.startsWith('/api/image/compress')) {
     return {
       task: 'image_compress',
@@ -138,10 +183,101 @@ const summarizeTaskIntent = (req) => {
     };
   }
 
+  if (req.originalUrl?.startsWith('/api/utils/checksum')) {
+    return {
+      task: 'utils_checksum',
+      expectedOutcome: 'Return SHA-256 hash and size for one uploaded file',
+      fileCount: req.file ? 1 : 0,
+    };
+  }
+
+  if (req.originalUrl?.startsWith('/api/utils/webhook-bin')) {
+    return {
+      task: 'utils_webhook_bin',
+      expectedOutcome: 'Create or inspect a temporary webhook request bin',
+      method: req.method,
+    };
+  }
+
   return {
     task: 'generic_api_request',
     expectedOutcome: 'Return successful API response for requested route',
   };
+};
+
+/*
+ * Report snapshots are sanitized at write-time so admin diagnostics remain
+ * useful without leaking raw credentials, PII, or large user payloads.
+ */
+const SENSITIVE_KEY_PATTERN = /(token|secret|password|authorization|cookie|api[-_]?key|session)/i;
+
+const sanitizeScalar = (value) => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
+
+  const text = String(value);
+  return text.length > 220 ? `${text.slice(0, 220)}...` : text;
+};
+
+const sanitizeValue = (value, depth = 0) => {
+  if (depth > 4) {
+    return '[truncated-depth]';
+  }
+
+  if (Array.isArray(value)) {
+    return value.slice(0, 30).map((item) => sanitizeValue(item, depth + 1));
+  }
+
+  if (value && typeof value === 'object') {
+    const out = {};
+    const entries = Object.entries(value).slice(0, 50);
+    for (const [key, nestedValue] of entries) {
+      if (SENSITIVE_KEY_PATTERN.test(key)) {
+        out[key] = '[redacted]';
+      } else {
+        out[key] = sanitizeValue(nestedValue, depth + 1);
+      }
+    }
+
+    return out;
+  }
+
+  return sanitizeScalar(value);
+};
+
+const hashIp = (rawIp) => {
+  const ip = String(rawIp || '').trim();
+  if (!ip) {
+    return null;
+  }
+
+  return createHash('sha256')
+    .update(`${env.failureReportHashSalt}:${ip}`)
+    .digest('hex')
+    .slice(0, 18);
+};
+
+const resolveReportOwnerId = (req) => {
+  if (req.adminAuth?.ownerId) {
+    return String(req.adminAuth.ownerId);
+  }
+
+  const ownerIdFromHeader = String(req.get('x-owner-id') || '')
+    .trim()
+    .toLowerCase();
+  if (!ownerIdFromHeader) {
+    return 'public';
+  }
+
+  return ownerIdFromHeader
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 64);
 };
 
 const safeQuerySnapshot = (query) => {
@@ -149,7 +285,7 @@ const safeQuerySnapshot = (query) => {
     return {};
   }
 
-  return { ...query };
+  return sanitizeValue(query);
 };
 
 const safeBodySnapshot = (body) => {
@@ -162,9 +298,14 @@ const safeBodySnapshot = (body) => {
     'mergePlan',
     'splitOptions',
     'extractOptions',
+    'watermarkOptions',
+    'pageNumberOptions',
+    'editPlan',
+    'textExtractOptions',
     'advancedOptions',
     'targetFormat',
     'conversionOptions',
+    'ttlSeconds',
   ];
   const snapshot = {};
 
@@ -172,11 +313,7 @@ const safeBodySnapshot = (body) => {
     if (Object.hasOwn(body, key)) {
       const value = body[key];
 
-      if (typeof value === 'string' && value.length > 600) {
-        snapshot[key] = `${value.slice(0, 600)}...`;
-      } else {
-        snapshot[key] = value;
-      }
+      snapshot[key] = sanitizeValue(value);
     }
   });
 
@@ -190,10 +327,31 @@ const safeFilesSnapshot = (files) => {
 
   return files.slice(0, 100).map((file) => ({
     fieldName: file.fieldname,
-    originalName: file.originalname,
     mimeType: file.mimetype,
     sizeBytes: file.size,
+    extension: String(file.originalname || '')
+      .toLowerCase()
+      .split('.')
+      .pop(),
   }));
+};
+
+const safeSingleFileSnapshot = (file) => {
+  if (!file || typeof file !== 'object') {
+    return [];
+  }
+
+  return [
+    {
+      fieldName: file.fieldname,
+      mimeType: file.mimetype,
+      sizeBytes: file.size,
+      extension: String(file.originalname || '')
+        .toLowerCase()
+        .split('.')
+        .pop(),
+    },
+  ];
 };
 
 const writeFailureReport = (req, meta, normalized, isUnexpectedError) => {
@@ -210,17 +368,18 @@ const writeFailureReport = (req, meta, normalized, isUnexpectedError) => {
       createdAt: timestamp,
       requestId: meta.requestId,
       taskId: req.taskId || req.get('x-task-id') || null,
+      ownerId: resolveReportOwnerId(req),
       operation: {
         method: req.method,
         path: req.originalUrl,
         intent: summarizeTaskIntent(req),
       },
       requestContext: {
-        ip: req.ip,
-        userAgent: req.get('user-agent') || null,
+        ipHash: hashIp(req.ip),
+        userAgent: null,
         query: safeQuerySnapshot(req.query),
         body: safeBodySnapshot(req.body),
-        uploadedFiles: safeFilesSnapshot(req.files),
+        uploadedFiles: [...safeFilesSnapshot(req.files), ...safeSingleFileSnapshot(req.file)],
       },
       failure: {
         statusCode: normalized.statusCode,

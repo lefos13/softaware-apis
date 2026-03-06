@@ -8,6 +8,7 @@ import { healthRouter } from '../modules/health/health.routes.js';
 import { imageRouter } from '../modules/image/image.routes.js';
 import { pdfRouter } from '../modules/pdf/pdf.routes.js';
 import { tasksRouter } from '../modules/tasks/tasks.routes.js';
+import { utilsRouter } from '../modules/utils/utils.routes.js';
 
 const apiRouter = Router();
 
@@ -16,5 +17,6 @@ apiRouter.use('/pdf', pdfRouter);
 apiRouter.use('/image', imageRouter);
 apiRouter.use('/tasks', tasksRouter);
 apiRouter.use('/admin', adminRouter);
+apiRouter.use('/utils', utilsRouter);
 
 export { apiRouter };

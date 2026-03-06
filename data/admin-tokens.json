@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "tokens": [
+    {
+      "tokenId": "e41a494b-ca7b-4790-8f30-6fba24ed5685",
+      "role": "admin",
+      "ownerId": "public",
+      "tokenHash": "7cfab65cd0aa899f4ca40996c66adf83c0c3057e36cc509da90fb230b80cdc25",
+      "createdAt": "2026-03-06T15:29:12.968Z",
+      "expiresAt": "2026-04-05T15:29:12.968Z",
+      "revokedAt": "2026-03-06T20:02:25.487Z",
+      "revocationReason": "superadmin_revoke_selected",
+      "revokedByTokenId": "2c4a9880-5be7-42ae-b86a-7498582abbd1"
+    },
+    {
+      "tokenId": "286834cb-dfb4-4186-8cd2-af220aa336a3",
+      "role": "admin",
+      "ownerId": "public",
+      "tokenHash": "8c96f33ae727e696fd1f1bd47850c97ffb9201ae9d56f639ac87e1b18406fe1b",
+      "createdAt": "2026-03-06T19:43:59.526Z",
+      "expiresAt": "2026-04-05T19:43:59.527Z",
+      "revokedAt": "2026-03-06T20:02:25.487Z",
+      "revocationReason": "superadmin_revoke_selected",
+      "revokedByTokenId": "2c4a9880-5be7-42ae-b86a-7498582abbd1"
+    },
+    {
+      "tokenId": "7b61ab48-3ee4-4d7a-bbbf-4b8806559ebe",
+      "role": "admin",
+      "ownerId": "public",
+      "tokenHash": "66eaee7d81513b47790b87b36ae2f9e43761df215c4fa0b8a8965e3f0fa694c6",
+      "createdAt": "2026-03-06T19:49:21.181Z",
+      "expiresAt": "2026-04-05T19:49:21.182Z",
+      "revokedAt": "2026-03-06T20:02:25.487Z",
+      "revocationReason": "superadmin_revoke_selected",
+      "revokedByTokenId": "2c4a9880-5be7-42ae-b86a-7498582abbd1"
+    },
+    {
+      "tokenId": "72555d06-7e9f-4bd8-b3e0-1876d9eeff24",
+      "role": "admin",
+      "ownerId": "public",
+      "tokenHash": "1866b009947da16e39372f29ec5ae8126beb52b54a43587218247acb19312856",
+      "createdAt": "2026-03-06T20:01:21.159Z",
+      "expiresAt": "2026-04-05T20:01:21.159Z",
+      "revokedAt": "2026-03-06T20:02:25.487Z",
+      "revocationReason": "superadmin_revoke_selected",
+      "revokedByTokenId": "2c4a9880-5be7-42ae-b86a-7498582abbd1"
+    },
+    {
+      "tokenId": "2c4a9880-5be7-42ae-b86a-7498582abbd1",
+      "role": "superadmin",
+      "ownerId": "global",
+      "tokenHash": "a90be105fda7abd34e2c3596c217159acb9e8de4302b5daf13b44ab1ab836583",
+      "createdAt": "2026-03-06T20:01:57.377Z",
+      "expiresAt": "2026-04-05T20:01:57.378Z",
+      "revokedAt": null
+    }
+  ]
+}

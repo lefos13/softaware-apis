@@ -40,4 +40,17 @@ export const env = {
   maxFileSizeBytes: asInt(process.env.MAX_FILE_SIZE_MB, 25) * 1024 * 1024,
   maxTotalUploadBytes: asInt(process.env.MAX_TOTAL_UPLOAD_MB, 120) * 1024 * 1024,
   pdfExtractToDocxEnabled: asBool(process.env.PDF_EXTRACT_TO_DOCX_ENABLED, true),
+  /*
+   * Runtime knobs below keep defensive middleware and admin token checks
+   * configurable per deployment while remaining safe by default.
+   */
+  mutatingRateLimitEnabled: asBool(process.env.MUTATING_RATE_LIMIT_ENABLED, true),
+  mutatingRateLimitPerMinute: asInt(process.env.MUTATING_RATE_LIMIT_PER_MINUTE, 5),
+  adminTokenStoreFile: process.env.ADMIN_TOKEN_STORE_FILE || 'data/admin-tokens.json',
+  adminTokenPepper: process.env.ADMIN_TOKEN_PEPPER || 'local-dev-admin-token-pepper',
+  failureReportHashSalt: process.env.FAILURE_REPORT_HASH_SALT || 'local-dev-report-hash-salt',
+  webhookBinTtlSeconds: asInt(process.env.WEBHOOK_BIN_TTL_SECONDS, 24 * 60 * 60),
+  webhookBinMaxBins: asInt(process.env.WEBHOOK_BIN_MAX_BINS, 300),
+  webhookBinMaxEntriesPerBin: asInt(process.env.WEBHOOK_BIN_MAX_ENTRIES_PER_BIN, 120),
+  webhookBinMaxPayloadBytes: asInt(process.env.WEBHOOK_BIN_MAX_PAYLOAD_BYTES, 256 * 1024),
 };

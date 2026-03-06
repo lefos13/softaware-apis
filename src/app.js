@@ -11,6 +11,7 @@ import { apiRouter } from './routes/index.js';
 import { env } from './config/env.js';
 import { buildOpenApiSpec } from './docs/openapi.js';
 import { errorHandler, notFoundHandler } from './common/middleware/error-handler.js';
+import { mutatingRateLimitMiddleware } from './common/middleware/rate-limit.js';
 import { sendSuccess } from './common/utils/api-response.js';
 
 const app = express();
@@ -43,6 +44,7 @@ app.get('/api/openapi.json', (_req, res) => {
 });
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec));
 
+app.use('/api', mutatingRateLimitMiddleware);
 app.use('/api', apiRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);

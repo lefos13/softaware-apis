@@ -33,6 +33,33 @@ This keeps the project simple now, while making it easy to split heavy tasks int
 
 Server default: `http://localhost:3000`
 
+## Admin and superadmin tokens
+
+Admin reports and superadmin controls use plaintext tokens minted by the backend CLI.
+The UI never creates tokens and `data/admin-tokens.json` stores only hashes, so values
+from that file cannot be pasted into the token field.
+
+Available scripts:
+
+- `npm run admin:token:create`
+  - Creates an admin token with the defaults from `src/scripts/admin-token.js`.
+- `npm run admin:token:create:superadmin`
+  - Creates a superadmin token with owner scope `global` and default TTL `30d`.
+
+Examples:
+
+```bash
+npm run admin:token:create -- --role=admin --owner-id=public --ttl=30d
+npm run admin:token:create:superadmin
+```
+
+Rules:
+
+- Store the printed `token=...` value securely because it is shown only once.
+- Use the plaintext token in the UI `x-admin-token` flow.
+- If a token is lost, mint a new one. Stored hashes are not reversible.
+- Use `npm run admin:token:create -- --help` to see the supported CLI options.
+
 ## OCR runtime dependencies (PDF -> Word extraction)
 
 Why this was added: hybrid text extraction needs native OCR tooling for scanned/photo PDFs.

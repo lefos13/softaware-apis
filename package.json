@@ -7,6 +7,8 @@
   "scripts": {
     "runtime:check": "node src/scripts/ensure-ocr-runtime.js",
     "runtime:install": "node src/scripts/ensure-ocr-runtime.js --install",
+    "admin:token:create": "node src/scripts/admin-token.js",
+    "admin:token:create:superadmin": "node src/scripts/admin-token.js --role=superadmin --owner-id=global --ttl=30d",
     "predev": "npm run runtime:check",
     "dev": "nodemon src/server.js",
     "prestart": "npm run runtime:check",
