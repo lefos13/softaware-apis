@@ -1,12 +1,16 @@
 /*
-  Controller tests verify binary responses and validation failures without
-  relying on a listening socket, which keeps the backend tests sandbox-safe.
-*/
+ * Controller tests verify both binary and JSON Books responses without
+ * relying on a listening socket, which keeps the backend tests sandbox-safe.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import JSZip from 'jszip';
 import { initializeTaskProgress } from '../../common/middleware/task-context.js';
-import { applyGreekEditorController } from './books.controller.js';
+import {
+  applyGreekEditorController,
+  applyGreekEditorTextController,
+  previewGreekEditorReportController,
+} from './books.controller.js';
 
 const createDocxBuffer = async (text = 'και αγάπη') => {
   const zip = new JSZip();
@@ -55,6 +59,10 @@ const createResponseMock = () => {
       return this;
     },
     send(payload) {
+      this.body = payload;
+      return this;
+    },
+    json(payload) {
       this.body = payload;
       return this;
     },
@@ -114,6 +122,27 @@ test('applyGreekEditorController returns a DOCX download with task metadata', as
   assert.ok(Buffer.isBuffer(res.body));
 });
 
+test('applyGreekEditorController returns a ZIP package when report output is requested', async () => {
+  const req = await createRequestMock({ ruleIds: ['kai_before_vowel'], includeReport: true });
+  const res = createResponseMock();
+  let forwardedError = null;
+
+  await new Promise((resolve) => {
+    initializeTaskProgress('books_greek_editor_apply')(req, res, resolve);
+  });
+
+  await applyGreekEditorController(req, res, (error) => {
+    forwardedError = error;
+  });
+
+  assert.equal(forwardedError, null);
+  assert.equal(res.getHeader('content-type'), 'application/zip');
+  assert.match(
+    res.getHeader('content-disposition') || '',
+    /filename="manuscript-edited-package\.zip"/,
+  );
+});
+
 test('applyGreekEditorController repairs mojibake upload names before setting Content-Disposition', async () => {
   const req = await createRequestMock(
     { ruleIds: ['kai_before_vowel'] },
@@ -161,4 +190,54 @@ test('applyGreekEditorController forwards unknown rule ids as API errors', async
 
   assert.equal(res.body, null);
   assert.equal(forwardedError.code, 'INVALID_RULE_ID');
+});
+
+test('applyGreekEditorTextController returns corrected text and report data', async () => {
+  const req = {
+    query: { taskId: 'books-task-text-1' },
+    body: {
+      inputText: 'σα λύκος.....',
+      editorOptions: {
+        ruleIds: ['sa_to_san', 'ellipsis_normalize'],
+        includeReport: true,
+      },
+    },
+    get: () => '',
+  };
+  const res = createResponseMock();
+  let forwardedError = null;
+
+  await new Promise((resolve) => {
+    initializeTaskProgress('books_greek_editor_apply_text')(req, res, resolve);
+  });
+
+  await applyGreekEditorTextController(req, res, (error) => {
+    forwardedError = error;
+  });
+
+  assert.equal(forwardedError, null);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.success, true);
+  assert.equal(res.body.data.correctedText, 'σαν λύκος...');
+  assert.match(res.body.data.reportText, /Αναλυτικές αλλαγές:/);
+});
+
+test('previewGreekEditorReportController returns JSON report preview for DOCX uploads', async () => {
+  const req = await createRequestMock({ ruleIds: ['kai_before_vowel'], includeReport: true });
+  const res = createResponseMock();
+  let forwardedError = null;
+
+  await new Promise((resolve) => {
+    initializeTaskProgress('books_greek_editor_preview_report')(req, res, resolve);
+  });
+
+  await previewGreekEditorReportController(req, res, (error) => {
+    forwardedError = error;
+  });
+
+  assert.equal(forwardedError, null);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.success, true);
+  assert.ok(res.body.data.report);
+  assert.match(res.body.data.reportText, /Αναφορά λογοτεχνικής επιμέλειας/);
 });

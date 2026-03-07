@@ -1,12 +1,12 @@
 /*
-  DOCX service tests build minimal OOXML packages so the editor can be
-  verified without relying on checked-in Word documents or external tooling.
-*/
+ * Service tests build minimal OOXML packages so both manuscript rewriting and
+ * text-mode editing can be verified without checked-in Word fixtures.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import JSZip from 'jszip';
 import { XMLParser } from 'fast-xml-parser';
-import { applyGreekEditorToDocxBuffer } from './books.service.js';
+import { applyGreekEditorToDocxBuffer, applyGreekEditorToText } from './books.service.js';
 
 const xmlParser = new XMLParser({
   preserveOrder: true,
@@ -92,6 +92,66 @@ test('applyGreekEditorToDocxBuffer rewrites only word/document.xml and supports 
   assert.match(documentXml, /σαν λύκος\.\.\./);
   assert.match(headerXml, /HEADER TEXT/);
   assert.equal(result.summary.totalReplacements, 3);
+  assert.equal(result.outputKind, 'docx');
+});
+
+test('applyGreekEditorToDocxBuffer can return a ZIP package with report files', async () => {
+  const inputBuffer = await createDocxBuffer({
+    documentXml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:body>
+          <w:p><w:r><w:t>σα λύκος</w:t></w:r></w:p>
+        </w:body>
+      </w:document>`,
+  });
+
+  const result = await applyGreekEditorToDocxBuffer(
+    {
+      buffer: inputBuffer,
+      originalname: 'book.docx',
+    },
+    {
+      ruleIds: ['sa_to_san'],
+      includeReport: true,
+    },
+  );
+
+  const zip = await JSZip.loadAsync(result.buffer);
+  const entries = Object.keys(zip.files);
+
+  assert.equal(result.outputKind, 'zip');
+  assert.ok(entries.includes('book-edited.docx'));
+  assert.ok(entries.includes('book-changes-report.txt'));
+  assert.ok(entries.includes('book-changes-report.json'));
+});
+
+test('applyGreekEditorToDocxBuffer repairs Greek names inside ZIP package entries', async () => {
+  const inputBuffer = await createDocxBuffer({
+    documentXml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:body>
+          <w:p><w:r><w:t>σα λύκος</w:t></w:r></w:p>
+        </w:body>
+      </w:document>`,
+  });
+
+  const result = await applyGreekEditorToDocxBuffer(
+    {
+      buffer: inputBuffer,
+      originalname: 'Î¤Î Î ÎÎ Î¡Î©ÎÎÎÎ Î¤ÎÎ¥ Î¡ÎÎ - ÎÎ»Î¿ÎºÎ»Î·ÏÏÎ¼ÎµÌÎ½Î¿.docx',
+    },
+    {
+      ruleIds: ['sa_to_san'],
+      includeReport: true,
+    },
+  );
+
+  const zip = await JSZip.loadAsync(result.buffer);
+  const entries = Object.keys(zip.files);
+
+  assert.ok(entries.includes('ΤΟ ΠΕΠΡΩΜΕΝΟ ΤΟΥ ΡΑΘ - Ολοκληρωμένο-edited.docx'));
+  assert.ok(entries.includes('ΤΟ ΠΕΠΡΩΜΕΝΟ ΤΟΥ ΡΑΘ - Ολοκληρωμένο-changes-report.txt'));
+  assert.ok(entries.includes('ΤΟ ΠΕΠΡΩΜΕΝΟ ΤΟΥ ΡΑΘ - Ολοκληρωμένο-changes-report.json'));
 });
 
 test('applyGreekEditorToDocxBuffer rejects invalid ZIP payloads', async () => {
@@ -188,4 +248,16 @@ test('applyGreekEditorToDocxBuffer preserves spaces around italic and proofing m
   assert.match(documentXml, /xml:space="preserve">Λέξη <\/w:t>/);
   assert.match(documentXml, /<w:t>κι<\/w:t>/);
   assert.match(documentXml, /xml:space="preserve"> αγάπη<\/w:t>/);
+});
+
+test('applyGreekEditorToText returns corrected text and optional report content', async () => {
+  const result = await applyGreekEditorToText('σα λύκος.....', {
+    ruleIds: ['sa_to_san', 'ellipsis_normalize'],
+    includeReport: true,
+  });
+
+  assert.equal(result.correctedText, 'σαν λύκος...');
+  assert.equal(result.summary.totalReplacements, 2);
+  assert.match(result.reportText, /Αναλυτικές αλλαγές:/);
+  assert.equal(result.report.changes.length, 2);
 });

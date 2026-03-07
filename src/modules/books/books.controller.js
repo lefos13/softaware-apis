@@ -1,6 +1,6 @@
-/**
- * Why this exists: the controller keeps the new book-editing flow aligned
- * with shared validation, task progress, and binary-download response rules.
+/*
+ * The Books controller keeps DOCX and text editing flows aligned with shared
+ * task progress, response metadata, and consistent validation/error payloads.
  */
 import { basename } from 'node:path';
 import {
@@ -8,16 +8,20 @@ import {
   failTaskProgress,
   updateTaskProgress,
 } from '../../common/services/task-progress-store.js';
-import { buildResponseMeta } from '../../common/utils/api-response.js';
+import { buildResponseMeta, sendSuccess } from '../../common/utils/api-response.js';
 import { ApiError } from '../../common/utils/api-error.js';
 import { env } from '../../config/env.js';
-import { applyGreekEditorToDocxBuffer } from './books.service.js';
+import {
+  applyGreekEditorToDocxBuffer,
+  applyGreekEditorToText,
+  previewGreekEditorDocxReport,
+} from './books.service.js';
 import { normalizeBooksEditorOptions } from './books.rules.js';
 
 const parseEditorOptions = (rawEditorOptions) => {
   if (!rawEditorOptions) {
     throw new ApiError(400, 'INVALID_EDITOR_OPTIONS', 'editorOptions is required', {
-      details: [{ field: 'editorOptions', issue: 'Provide editor options as a JSON string' }],
+      details: [{ field: 'editorOptions', issue: 'Provide editor options as a JSON payload' }],
     });
   }
 
@@ -41,10 +45,10 @@ const repairIncomingFileName = (value) => {
   }
 };
 
-const buildOutputName = (originalName) => {
-  const normalizedName = repairIncomingFileName(originalName || 'manuscript.docx');
+const buildBaseName = (value) => {
+  const normalizedName = repairIncomingFileName(value || 'manuscript.docx');
   const baseName = String(basename(normalizedName)).replace(/\.docx$/i, '');
-  return `${baseName || 'manuscript'}-edited.docx`;
+  return baseName || 'manuscript';
 };
 
 /*
@@ -61,13 +65,48 @@ const buildContentDisposition = (fileName) => {
   return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodedFileName}`;
 };
 
+const resolveBinaryOutput = (originalName, outputKind) => {
+  const baseName = buildBaseName(originalName);
+
+  if (outputKind === 'zip') {
+    return {
+      fileName: `${baseName}-edited-package.zip`,
+      contentType: 'application/zip',
+      message: 'Greek literature corrections and report prepared successfully',
+    };
+  }
+
+  return {
+    fileName: `${baseName}-edited.docx`,
+    contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    message: 'Greek literature corrections applied successfully',
+  };
+};
+
+const ensureFeatureEnabled = () => {
+  if (!env.booksGreekEditorEnabled) {
+    throw new ApiError(404, 'FEATURE_DISABLED', 'Greek literature editor is currently disabled');
+  }
+};
+
+const parseTextPayload = (body) => {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new ApiError(400, 'INVALID_INPUT', 'Request body must be a JSON object', {
+      details: [{ field: 'body', issue: 'Provide inputText and editorOptions in JSON' }],
+    });
+  }
+
+  return {
+    inputText: String(body.inputText || ''),
+    editorOptions: parseEditorOptions(body.editorOptions),
+  };
+};
+
 export async function applyGreekEditorController(req, res, next) {
   const taskId = req.taskId;
 
   try {
-    if (!env.booksGreekEditorEnabled) {
-      throw new ApiError(404, 'FEATURE_DISABLED', 'Greek literature editor is currently disabled');
-    }
+    ensureFeatureEnabled();
 
     const files = req.files;
     if (!files || files.length !== 1) {
@@ -107,9 +146,73 @@ export async function applyGreekEditorController(req, res, next) {
       throw error;
     }
 
-    const { buffer, summary } = await applyGreekEditorToDocxBuffer(
-      files[0],
-      editorOptions,
+    const result = await applyGreekEditorToDocxBuffer(files[0], editorOptions, (progressUpdate) => {
+      updateTaskProgress(taskId, progressUpdate);
+    });
+    const binaryOutput = resolveBinaryOutput(files[0].originalname, result.outputKind);
+
+    updateTaskProgress(taskId, {
+      progress: 99,
+      step:
+        result.outputKind === 'zip'
+          ? 'Finalizing manuscript package'
+          : 'Finalizing corrected manuscript',
+      metadata: result.summary,
+    });
+
+    completeTaskProgress(
+      taskId,
+      result.outputKind === 'zip'
+        ? 'Corrected manuscript package ready for download'
+        : 'Corrected manuscript ready for download',
+    );
+
+    buildResponseMeta(req, res);
+    res.setHeader('Content-Type', binaryOutput.contentType);
+    res.setHeader('Content-Disposition', buildContentDisposition(binaryOutput.fileName));
+    res.setHeader('Content-Length', result.buffer.length);
+    res.setHeader('X-Operation-Message', binaryOutput.message);
+
+    res.status(200).send(Buffer.from(result.buffer));
+  } catch (error) {
+    failTaskProgress(taskId, {
+      code: error?.code,
+      message: error?.message,
+      step: 'Greek literature editor failed',
+    });
+
+    next(error);
+  }
+}
+
+export async function applyGreekEditorTextController(req, res, next) {
+  const taskId = req.taskId;
+
+  try {
+    ensureFeatureEnabled();
+
+    updateTaskProgress(taskId, {
+      progress: 5,
+      step: 'Text request received',
+      metadata: {},
+    });
+
+    let payload;
+    try {
+      payload = parseTextPayload(req.body);
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new ApiError(400, 'INVALID_INPUT', 'Request body must be valid JSON', {
+          details: [{ field: 'body', issue: 'Invalid JSON' }],
+        });
+      }
+
+      throw error;
+    }
+
+    const result = await applyGreekEditorToText(
+      payload.inputText,
+      payload.editorOptions,
       (progressUpdate) => {
         updateTaskProgress(taskId, progressUpdate);
       },
@@ -117,30 +220,89 @@ export async function applyGreekEditorController(req, res, next) {
 
     updateTaskProgress(taskId, {
       progress: 99,
-      step: 'Finalizing corrected manuscript',
-      metadata: summary,
+      step: 'Finalizing corrected text',
+      metadata: result.summary,
     });
 
-    completeTaskProgress(taskId, 'Corrected manuscript ready for download');
+    completeTaskProgress(taskId, 'Corrected text ready');
 
-    buildResponseMeta(req, res);
-    res.setHeader(
-      'Content-Type',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    );
-    res.setHeader(
-      'Content-Disposition',
-      buildContentDisposition(buildOutputName(files[0].originalname)),
-    );
-    res.setHeader('Content-Length', buffer.length);
-    res.setHeader('X-Operation-Message', 'Greek literature corrections applied successfully');
-
-    res.status(200).send(Buffer.from(buffer));
+    sendSuccess(res, req, {
+      message: 'Greek literature text corrections applied successfully',
+      data: {
+        correctedText: result.correctedText,
+        summary: result.summary,
+        report: result.report,
+        reportText: result.reportText,
+      },
+    });
   } catch (error) {
     failTaskProgress(taskId, {
       code: error?.code,
       message: error?.message,
-      step: 'Greek literature editor failed',
+      step: 'Greek literature text editor failed',
+    });
+
+    next(error);
+  }
+}
+
+export async function previewGreekEditorReportController(req, res, next) {
+  const taskId = req.taskId;
+
+  try {
+    ensureFeatureEnabled();
+
+    const files = req.files;
+    if (!files || files.length !== 1) {
+      throw new ApiError(400, 'INVALID_INPUT', 'Upload exactly one DOCX file in field "files"', {
+        details: [{ field: 'files', issue: 'Exactly one DOCX file is required' }],
+      });
+    }
+
+    updateTaskProgress(taskId, {
+      progress: 5,
+      step: 'Upload received, preparing report preview',
+      metadata: { totalFiles: files.length },
+    });
+
+    let editorOptions;
+    try {
+      editorOptions = parseEditorOptions(req.body?.editorOptions);
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new ApiError(400, 'INVALID_EDITOR_OPTIONS', 'editorOptions must be valid JSON', {
+          details: [{ field: 'editorOptions', issue: 'Invalid JSON' }],
+        });
+      }
+
+      throw error;
+    }
+
+    const result = await previewGreekEditorDocxReport(files[0], editorOptions, (progressUpdate) => {
+      updateTaskProgress(taskId, progressUpdate);
+    });
+
+    updateTaskProgress(taskId, {
+      progress: 99,
+      step: 'Report preview ready',
+      metadata: result.summary,
+    });
+
+    completeTaskProgress(taskId, 'Report preview ready');
+
+    sendSuccess(res, req, {
+      message: 'Greek literature report preview generated successfully',
+      data: {
+        summary: result.summary,
+        report: result.report,
+        reportText: result.reportText,
+      },
+    });
+  } catch (error) {
+    failTaskProgress(taskId, {
+      code: error?.code,
+      message: error?.message,
+      step: 'Greek literature report preview failed',
     });
 
     next(error);

@@ -1,8 +1,6 @@
-/**
- * Why this exists: API schema now documents automated health checks plus PDF
- * and image-processing contracts so frontend flows remain aligned to backend.
- * It now includes PDF-to-DOCX extraction (with OCR fallback) and image
- * conversion so tools can offer broader support with shared conventions.
+/*
+ * The OpenAPI spec documents the live request and response contracts so the
+ * frontend stays aligned with backend validation, binary outputs, and JSON APIs.
  */
 import { env } from '../config/env.js';
 
@@ -496,7 +494,7 @@ export function buildOpenApiSpec() {
         post: {
           tags: ['Books'],
           summary: 'Apply Greek literature editing rules to one Word (.docx) manuscript',
-          description: `Upload exactly one DOCX in \`files\` plus required \`editorOptions\` JSON. The service edits only the main body text of \`word/document.xml\`, applies the selected rules in fixed server order, and returns one corrected DOCX. Limits: ${env.maxUploadFiles} files, ${maxFileSizeMb} MB each, ${maxTotalUploadMb} MB total.`,
+          description: `Upload exactly one DOCX in \`files\` plus required \`editorOptions\` JSON. The service edits only the main body text of \`word/document.xml\`, applies the selected rules in fixed server order, and returns one corrected DOCX. If \`editorOptions.includeReport=true\`, the response is a ZIP package containing the corrected DOCX plus text and JSON change reports. Limits: ${env.maxUploadFiles} files, ${maxFileSizeMb} MB each, ${maxTotalUploadMb} MB total.`,
           operationId: 'applyGreekEditorRules',
           parameters: [
             {
@@ -524,7 +522,7 @@ export function buildOpenApiSpec() {
                     editorOptions: {
                       type: 'string',
                       description:
-                        'JSON string. Example: {"ruleIds":["kai_before_vowel","ellipsis_normalize"]}. Allowed values: kai_before_vowel, stin_article_trim, min_negation_trim, sa_to_san, ellipsis_normalize.',
+                        'JSON string. Example: {"ruleIds":["kai_before_vowel","ellipsis_normalize"],"includeReport":true,"preferences":{"andrasStyle":"antras","avgoStyle":"avgo"}}.',
                     },
                   },
                   required: ['files', 'editorOptions'],
@@ -534,7 +532,7 @@ export function buildOpenApiSpec() {
           },
           responses: {
             200: {
-              description: 'Corrected DOCX manuscript',
+              description: 'Corrected DOCX manuscript or ZIP package with report files',
               headers: {
                 'X-Operation-Message': {
                   description: 'User-friendly success message for UI notifications',
@@ -556,6 +554,299 @@ export function buildOpenApiSpec() {
               content: {
                 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': {
                   schema: { type: 'string', format: 'binary' },
+                },
+                'application/zip': {
+                  schema: { type: 'string', format: 'binary' },
+                },
+              },
+            },
+            400: {
+              description: 'Input validation error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            413: {
+              description: 'Upload exceeds per-file or total-size constraints',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            415: {
+              description: 'Uploaded file type is not supported',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            422: {
+              description: 'DOCX parsing or OOXML rewriting failed',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            429: {
+              description: 'Mutating request rate limit exceeded for source IP',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            500: {
+              description: 'Unexpected server error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/books/greek-editor/apply-text': {
+        post: {
+          tags: ['Books'],
+          summary: 'Apply Greek literature editing rules to pasted text',
+          description:
+            'Send JSON with `inputText` and `editorOptions`. The service applies the selected rules in fixed server order and returns corrected text, summary counts, and optional detailed report content.',
+          operationId: 'applyGreekEditorRulesToText',
+          parameters: [
+            {
+              name: 'taskId',
+              in: 'query',
+              required: false,
+              schema: { type: 'string' },
+              description:
+                'Optional client-provided task id used for progress polling. If omitted, backend generates one.',
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    inputText: {
+                      type: 'string',
+                      description: 'The pasted Greek text to correct.',
+                    },
+                    editorOptions: {
+                      type: 'object',
+                      properties: {
+                        ruleIds: {
+                          type: 'array',
+                          items: { type: 'string' },
+                          minItems: 1,
+                        },
+                        includeReport: {
+                          type: 'boolean',
+                        },
+                        preferences: {
+                          type: 'object',
+                          properties: {
+                            andrasStyle: {
+                              type: 'string',
+                              enum: ['antras', 'andras'],
+                            },
+                            avgoStyle: {
+                              type: 'string',
+                              enum: ['avgo', 'avgoBeta'],
+                            },
+                          },
+                        },
+                      },
+                      required: ['ruleIds'],
+                    },
+                  },
+                  required: ['inputText', 'editorOptions'],
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'Corrected text and optional report content',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      message: {
+                        type: 'string',
+                        example: 'Greek literature text corrections applied successfully',
+                      },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          correctedText: {
+                            type: 'string',
+                            example: 'σαν λύκος...',
+                          },
+                          summary: {
+                            type: 'object',
+                            properties: {
+                              totalReplacements: { type: 'integer', example: 2 },
+                              replacementCounts: {
+                                type: 'object',
+                                additionalProperties: { type: 'integer' },
+                              },
+                            },
+                          },
+                          report: {
+                            type: 'object',
+                            nullable: true,
+                            additionalProperties: true,
+                          },
+                          reportText: {
+                            type: 'string',
+                          },
+                        },
+                        required: ['correctedText', 'summary', 'report', 'reportText'],
+                      },
+                      meta: {
+                        type: 'object',
+                        properties: {
+                          requestId: { type: 'string' },
+                          timestamp: { type: 'string', format: 'date-time' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            400: {
+              description: 'Input validation error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            404: {
+              description: 'Feature disabled',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            429: {
+              description: 'Mutating request rate limit exceeded for source IP',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            500: {
+              description: 'Unexpected server error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/books/greek-editor/preview-report': {
+        post: {
+          tags: ['Books'],
+          summary: 'Generate a JSON report preview for one Word (.docx) manuscript',
+          description:
+            'Upload exactly one DOCX in `files` plus `editorOptions` JSON and receive a JSON preview of the report that would accompany the corrected manuscript package.',
+          operationId: 'previewGreekEditorReport',
+          parameters: [
+            {
+              name: 'taskId',
+              in: 'query',
+              required: false,
+              schema: { type: 'string' },
+              description:
+                'Optional client-provided task id used for progress polling. If omitted, backend generates one.',
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'multipart/form-data': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    files: {
+                      type: 'array',
+                      items: { type: 'string', format: 'binary' },
+                      minItems: 1,
+                      maxItems: 1,
+                    },
+                    editorOptions: {
+                      type: 'string',
+                      description:
+                        'JSON string. Example: {"ruleIds":["kai_before_vowel"],"includeReport":true,"preferences":{"andrasStyle":"antras","avgoStyle":"avgo"}}.',
+                    },
+                  },
+                  required: ['files', 'editorOptions'],
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'Report preview payload for the uploaded DOCX',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean', example: true },
+                      message: {
+                        type: 'string',
+                        example: 'Greek literature report preview generated successfully',
+                      },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          summary: {
+                            type: 'object',
+                            properties: {
+                              totalReplacements: { type: 'integer' },
+                              changedParagraphs: { type: 'integer' },
+                              replacementCounts: {
+                                type: 'object',
+                                additionalProperties: { type: 'integer' },
+                              },
+                            },
+                          },
+                          report: {
+                            type: 'object',
+                            additionalProperties: true,
+                          },
+                          reportText: {
+                            type: 'string',
+                          },
+                        },
+                        required: ['summary', 'report', 'reportText'],
+                      },
+                      meta: {
+                        type: 'object',
+                        properties: {
+                          requestId: { type: 'string' },
+                          timestamp: { type: 'string', format: 'date-time' },
+                        },
+                      },
+                    },
+                  },
                 },
               },
             },
