@@ -40,6 +40,7 @@ export const env = {
   maxFileSizeBytes: asInt(process.env.MAX_FILE_SIZE_MB, 25) * 1024 * 1024,
   maxTotalUploadBytes: asInt(process.env.MAX_TOTAL_UPLOAD_MB, 120) * 1024 * 1024,
   pdfExtractToDocxEnabled: asBool(process.env.PDF_EXTRACT_TO_DOCX_ENABLED, true),
+  booksGreekEditorEnabled: asBool(process.env.BOOKS_GREEK_EDITOR_ENABLED, true),
   /*
    * Runtime knobs below keep defensive middleware and admin token checks
    * configurable per deployment while remaining safe by default.

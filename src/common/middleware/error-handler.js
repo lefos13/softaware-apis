@@ -172,6 +172,15 @@ const summarizeTaskIntent = (req) => {
     };
   }
 
+  if (req.originalUrl?.startsWith('/api/books/greek-editor/apply')) {
+    return {
+      task: 'books_greek_editor_apply',
+      expectedOutcome: 'Generate one corrected DOCX from the uploaded Greek manuscript',
+      fileCount: Array.isArray(req.files) ? req.files.length : 0,
+      editorOptionsProvided: Boolean(req.body?.editorOptions),
+    };
+  }
+
   if (req.originalUrl?.startsWith('/api/tasks/')) {
     const fromParams = req.params?.taskId;
     const fromPath = req.originalUrl.split('/').filter(Boolean).pop() || null;
@@ -305,6 +314,7 @@ const safeBodySnapshot = (body) => {
     'advancedOptions',
     'targetFormat',
     'conversionOptions',
+    'editorOptions',
     'ttlSeconds',
   ];
   const snapshot = {};

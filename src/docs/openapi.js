@@ -22,6 +22,7 @@ export function buildOpenApiSpec() {
       { name: 'Health', description: 'Service liveliness checks.' },
       { name: 'PDF', description: 'PDF processing endpoints.' },
       { name: 'Image', description: 'Image compression and format-conversion endpoints.' },
+      { name: 'Books', description: 'Book and manuscript editing endpoints.' },
       { name: 'Utils', description: 'Lightweight utility endpoints.' },
       { name: 'Tasks', description: 'Long-running task progress endpoints.' },
       { name: 'Admin', description: 'Administrative reporting endpoints.' },
@@ -486,6 +487,124 @@ export function buildOpenApiSpec() {
               description: 'Unexpected server error',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+              },
+            },
+          },
+        },
+      },
+      '/api/books/greek-editor/apply': {
+        post: {
+          tags: ['Books'],
+          summary: 'Apply Greek literature editing rules to one Word (.docx) manuscript',
+          description: `Upload exactly one DOCX in \`files\` plus required \`editorOptions\` JSON. The service edits only the main body text of \`word/document.xml\`, applies the selected rules in fixed server order, and returns one corrected DOCX. Limits: ${env.maxUploadFiles} files, ${maxFileSizeMb} MB each, ${maxTotalUploadMb} MB total.`,
+          operationId: 'applyGreekEditorRules',
+          parameters: [
+            {
+              name: 'taskId',
+              in: 'query',
+              required: false,
+              schema: { type: 'string' },
+              description:
+                'Optional client-provided task id used for progress polling. If omitted, backend generates one.',
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'multipart/form-data': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    files: {
+                      type: 'array',
+                      items: { type: 'string', format: 'binary' },
+                      minItems: 1,
+                      maxItems: 1,
+                    },
+                    editorOptions: {
+                      type: 'string',
+                      description:
+                        'JSON string. Example: {"ruleIds":["kai_before_vowel","ellipsis_normalize"]}. Allowed values: kai_before_vowel, stin_article_trim, min_negation_trim, sa_to_san, ellipsis_normalize.',
+                    },
+                  },
+                  required: ['files', 'editorOptions'],
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'Corrected DOCX manuscript',
+              headers: {
+                'X-Operation-Message': {
+                  description: 'User-friendly success message for UI notifications',
+                  schema: {
+                    type: 'string',
+                    example: 'Greek literature corrections applied successfully',
+                  },
+                },
+                'X-Request-Id': {
+                  description: 'Request correlation id for support/debugging',
+                  schema: { type: 'string', example: '2d5e4c95-cf21-4b2d-8710-8a77a66cc2d8' },
+                },
+                'X-Task-Id': {
+                  description:
+                    'Resolved task id (from query/header/generated) that can be used to poll `/api/tasks/{taskId}` progress',
+                  schema: { type: 'string', example: '8c9e7afb-573e-4d34-b6ef-8f0d03f518d6' },
+                },
+              },
+              content: {
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document': {
+                  schema: { type: 'string', format: 'binary' },
+                },
+              },
+            },
+            400: {
+              description: 'Input validation error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            413: {
+              description: 'Upload exceeds per-file or total-size constraints',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            415: {
+              description: 'Uploaded file type is not supported',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            422: {
+              description: 'DOCX parsing or OOXML rewriting failed',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            429: {
+              description: 'Mutating request rate limit exceeded for source IP',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            500: {
+              description: 'Unexpected server error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
               },
             },
           },

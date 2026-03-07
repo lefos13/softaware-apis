@@ -81,6 +81,8 @@ Feature flag:
 
 - `PDF_EXTRACT_TO_DOCX_ENABLED=true` (default)
 - Set to `false` to disable `POST /api/pdf/extract-to-docx`
+- `BOOKS_GREEK_EDITOR_ENABLED=true` (default)
+- Set to `false` to disable `POST /api/books/greek-editor/apply`
 
 ## Code quality workflow (ESLint, Prettier, Husky)
 
@@ -161,6 +163,20 @@ Recommended workflow:
 
 - `GET /api/health`
 - Intended for automated polling from frontend guard logic (for example every 5-10 seconds).
+
+### Greek Literature Editor
+
+- `POST /api/books/greek-editor/apply`
+- `Content-Type: multipart/form-data`
+- File field: `files` (must include exactly 1 `.docx`)
+- Required field: `editorOptions` (JSON string) with `ruleIds`
+- Response: one corrected `.docx` download
+- Supported rule ids:
+  - `kai_before_vowel`
+  - `stin_article_trim`
+  - `min_negation_trim`
+  - `sa_to_san`
+  - `ellipsis_normalize`
 
 ### Merge PDFs
 
