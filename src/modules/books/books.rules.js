@@ -45,8 +45,8 @@ const COLLOQUIAL_ENDINGS = [
 ];
 const SENTENCE_END_CHAR_REGEX = /[.!?;…\n]/;
 const COLLOQUIAL_PROGRESSIVE_EXCLUDED_STEMS = ['σπ', 'σκ'];
-const COLLOQUIAL_PROGRESSIVE_EXCLUDED_WORD_STEMS = new Set(['διεξηγ', 'παρηγ']);
-const COMMA_SUBORDINATORS = ['για να', 'όταν', 'γιατί', 'επειδή', 'διότι', 'άμα'];
+const COLLOQUIAL_PROGRESSIVE_EXCLUDED_WORD_STEMS = new Set(['διεξηγ', 'παρηγ', 'αχορτ', 'απηγ']);
+const COMMA_SUBORDINATORS = ['για να', 'όταν', 'γιατί', 'επειδή', 'διότι'];
 const PRIN_BEFORE_FIXED_PHRASES = [
   ['το', 'μαθημα'],
   ['τη', 'δουλεια'],
@@ -305,6 +305,15 @@ const DIRECT_PHRASE_REPLACEMENTS = {
     'μέρα νύχτα': 'μέρα-νύχτα',
     'άψε σβήσε': 'άψε-σβήσε',
     'πέρα δώθε': 'πέρα-δώθε',
+  },
+  /*
+   * This keeps one canonical contracted form for the phrase so spacing and
+   * apostrophe variants are normalized consistently across inputs.
+   */
+  giati_giati_normalize: {
+    'για αυτό': 'γι’ αυτό',
+    'γι αυτό': 'γι’ αυτό',
+    "γι' αυτό": 'γι’ αυτό',
   },
   oson_afora_normalize: {
     'όσο αναφορά': 'όσον αφορά',
@@ -973,7 +982,7 @@ function buildMultipleSpacesEdits(text) {
  * dialogue punctuation.
  */
 function buildCommaSpaceEdits(text) {
-  return [...text.matchAll(/,(?!\s|$)/g)].flatMap((match) => {
+  return [...text.matchAll(/,(?!\s|$|\u00BB)/g)].flatMap((match) => {
     const previousChar = text[Math.max(match.index - 1, 0)] || '';
     const nextChunk = text.slice(Math.max(match.index - 1, 0), match.index + 3);
 
@@ -992,7 +1001,11 @@ function buildCommaSpaceEdits(text) {
 }
 
 function buildPeriodSpaceEdits(text) {
-  return [...text.matchAll(/\.(?!\s|$|»|\d)/g)].flatMap((match) => {
+  /*
+   * Skip periods that are part of consecutive dots so ellipsis-like punctuation
+   * is not split by this spacing rule.
+   */
+  return [...text.matchAll(/\.(?!\s|$|»|\d|\.)/g)].flatMap((match) => {
     const previousChar = text[Math.max(match.index - 1, 0)] || '';
     if (/\d/u.test(previousChar)) {
       return [];
@@ -1182,11 +1195,57 @@ function buildQuotePeriodPreferenceEdits(text, options) {
     }));
   }
 
-  return [...text.matchAll(/\.»/g)].map((match) => ({
-    start: match.index,
-    end: match.index + match[0].length,
-    replacement: '».',
-  }));
+  /*
+   * For outside-quote periods, ellipsis endings ("...") need separate handling:
+   * keep the ellipsis inside the quote, add an outside period only at sentence
+   * end, and avoid adding one when the sentence clearly continues.
+   */
+  return [...text.matchAll(/\.»/g)].flatMap((match) => {
+    const dotIndex = match.index;
+    const quoteIndex = dotIndex + 1;
+    const previousOne = text[Math.max(dotIndex - 1, 0)] || '';
+    const previousTwo = text[Math.max(dotIndex - 2, 0)] || '';
+    const isEllipsisTail = previousOne === '.' && previousTwo === '.';
+    const nextChar = text[quoteIndex + 1] || '';
+
+    if (nextChar === '.') {
+      return [];
+    }
+
+    if (isEllipsisTail) {
+      let cursor = quoteIndex + 1;
+      while (cursor < text.length && /[ \t]/u.test(text[cursor])) {
+        cursor += 1;
+      }
+
+      const nextToken = text[cursor] || '';
+      const sentenceContinues =
+        nextToken === ',' ||
+        nextToken === ':' ||
+        nextToken === '-' ||
+        /[\p{Script=Greek}A-Za-z0-9]/u.test(nextToken);
+
+      if (sentenceContinues) {
+        return [];
+      }
+
+      return [
+        {
+          start: dotIndex,
+          end: dotIndex + match[0].length,
+          replacement: '.».',
+        },
+      ];
+    }
+
+    return [
+      {
+        start: dotIndex,
+        end: dotIndex + match[0].length,
+        replacement: '».',
+      },
+    ];
+  });
 }
 
 function buildCommaBeforeSubordinatorsEdits(text) {
@@ -1609,6 +1668,10 @@ export const BOOKS_RULE_REGISTRY = [
   { id: 'guillemets_normalize', apply: buildGuillemetsEdits },
   { id: 'den_negation_trim', apply: buildDenNegationPreferenceEdits },
   { id: 'akomi_to_akoma_before_kai', apply: buildAkomaBeforeKaiEdits },
+  {
+    id: 'giati_giati_normalize',
+    apply: (text) => buildMappedPhraseEdits(text, DIRECT_PHRASE_REPLACEMENTS.giati_giati_normalize),
+  },
   { id: 'me_se_mena_sena_contract', apply: buildMeSeMenaSenaEdits },
   { id: 'prin_before_time_phrase', apply: buildPrinBeforeTimePhraseEdits },
   { id: 'question_pou_pos_toning', apply: buildQuestionPouPosToningEdits },

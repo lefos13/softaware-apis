@@ -1,0 +1,9 @@
+{
+  /* Keep shared editor defaults on UTF-8 and LF so Greek text stays stable
+   * across macOS and Windows checkouts instead of being re-saved with a local
+   * code page or line-ending convention.
+   */
+  "files.encoding": "utf8",
+  "files.autoGuessEncoding": false,
+  "files.eol": "\n"
+}
