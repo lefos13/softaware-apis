@@ -13,28 +13,41 @@ const applyRules = (text, ruleIds, extra = {}) =>
   });
 
 test('original literary rules still transform the expected cases', () => {
-  const result = applyRules('και αγάπη στην βροχή μην βγεις σα λύκος.....', [
-    'kai_before_vowel',
-    'stin_article_trim',
-    'min_negation_trim',
-    'sa_to_san',
-    'ellipsis_normalize',
-  ]);
+  const result = applyRules(
+    'και αγάπη στην βροχή αυτή τη μπάλα αυτή την καρέκλα μη γκρινιάζεις μην βγεις σα λύκος.....',
+    [
+      'kai_before_vowel',
+      'stin_article_trim',
+      'min_negation_trim',
+      'sa_to_san',
+      'ellipsis_normalize',
+    ],
+  );
 
-  assert.equal(result.text, 'κι αγάπη στη βροχή μη βγεις σαν λύκος...');
+  assert.equal(
+    result.text,
+    'κι αγάπη στη βροχή αυτή την μπάλα αυτήν τη καρέκλα μην γκρινιάζεις μη βγεις σαν λύκος...',
+  );
 });
 
 test('new literary rules normalize spacing, guillemets, δεν, ακόμα, προτού, and contractions', () => {
-  const result = applyRules('<<δεν  βγαίνω>> ακόμη και πριν να πω με μένα και σε σένα', [
-    'multiple_spaces_normalize',
-    'guillemets_normalize',
-    'den_negation_trim',
-    'akomi_to_akoma_before_kai',
-    'prin_na_to_protou',
-    'me_se_mena_sena_contract',
-  ]);
+  const result = applyRules(
+    '<<δεν  βγαίνω>>,ακόμη και πριν να πω με μένα και σε σένα.Ύστερα είπε.»Τέλος». Και το 3.14 μένει ίδιο και ό,τι θέλεις.',
+    [
+      'multiple_spaces_normalize',
+      'comma_space_normalize',
+      'period_space_normalize',
+      'guillemets_normalize',
+      'den_negation_trim',
+      'akomi_to_akoma_before_kai',
+      'me_se_mena_sena_contract',
+    ],
+  );
 
-  assert.equal(result.text, "«δε βγαίνω» ακόμα και προτού πω μ' εμένα και σ' εσένα");
+  assert.equal(
+    result.text,
+    "«δε βγαίνω», ακόμα και πριν να πω μ' εμένα και σ' εσένα. Ύστερα είπε.»Τέλος». Και το 3.14 μένει ίδιο και ό,τι θέλεις.",
+  );
 });
 
 test('den negation rule supports global δεν preference', () => {
@@ -46,19 +59,26 @@ test('den negation rule supports global δεν preference', () => {
 });
 
 test('new literary phrase replacements normalize μέσα στο, κάθε ένας, με μιας, and εξ αρχής', () => {
-  const result = applyRules('μέσα στο σπίτι κάθε ένας με μιας και εξ αρχής το ξέρει', [
-    'mesa_sto_contract',
-    'kathe_enas_series',
-    'me_mias_normalize',
-    'ex_archis_normalize',
-  ]);
+  const result = applyRules(
+    'μέσα στο σπίτι κάθε ένας με μιας και εξ αρχής το ξέρει κυρ-Αλέξης πάτερ-Νικόλα καπετάν-Μιχάλης',
+    [
+      'mesa_sto_contract',
+      'kathe_enas_series',
+      'me_mias_normalize',
+      'ex_archis_normalize',
+      'kyriarx_no_hyphen',
+    ],
+  );
 
-  assert.equal(result.text, 'μες στο σπίτι καθένας μεμιάς και εξαρχής το ξέρει');
+  assert.equal(
+    result.text,
+    'μες στο σπίτι καθένας μεμιάς και εξαρχής το ξέρει κυρ Αλέξης πάτερ Νικόλα καπετάν Μιχάλης',
+  );
 });
 
 test('new literary phrase rules normalize before-phrases, quote punctuation, syntax phrases, and fixed contractions', () => {
   const result = applyRules(
-    'Πριν το μάθημα είπε: «Γύρισα»,. Θα φύγω πριν δεκαπέντε χρόνια και πριν τις δέκα το βράδυ. Ήταν πριν πολύ καιρό, πριν τέσσερις δεκαετίες, πριν κάτι μήνες, πριν πολλά πολλά χρόνια, πριν λίγες μέρες και πριν σχεδόν μισό αιώνα. ανάμεσα στην πόλη και την θάλασσα στο είπα δόξα τον Θεό που και που έρχομαι και φεύγω όταν θέλω',
+    'Πριν το μάθημα είπε: «Γύρισα», και «γύρνα,» . Θα φύγω πριν δεκαπέντε χρόνια και πριν τις δέκα το βράδυ. Ήταν πριν πολύ καιρό, πριν τέσσερις δεκαετίες, πριν κάτι μήνες, πριν πολλά πολλά χρόνια, πριν λίγες μέρες και πριν σχεδόν μισό αιώνα. ανάμεσα στην πόλη και την θάλασσα, ανάμεσα σε φίλους και τους γείτονες, ανάμεσα σε τη θάλασσα και τις πέτρες στο είπα δόξα τον Θεό που και που έρχομαι και φεύγω όταν θέλω',
     [
       'prin_before_time_phrase',
       'quote_comma_trim',
@@ -71,7 +91,7 @@ test('new literary phrase rules normalize before-phrases, quote punctuation, syn
 
   assert.equal(
     result.text,
-    "Πριν από το μάθημα είπε: «Γύρισα». Θα φύγω πριν από δεκαπέντε χρόνια και πριν από τις δέκα το βράδυ. Ήταν πριν από πολύ καιρό, πριν από τέσσερις δεκαετίες, πριν από κάτι μήνες, πριν από πολλά πολλά χρόνια, πριν από λίγες μέρες και πριν από σχεδόν μισό αιώνα. ανάμεσα στην πόλη και στην θάλασσα σ' το είπα δόξα τω Θεώ που και που έρχομαι και φεύγω όταν θέλω",
+    "Πριν από το μάθημα είπε: «Γύρισα» και «γύρνα» . Θα φύγω πριν από δεκαπέντε χρόνια και πριν από τις δέκα το βράδυ. Ήταν πριν από πολύ καιρό, πριν από τέσσερις δεκαετίες, πριν από κάτι μήνες, πριν από πολλά πολλά χρόνια, πριν από λίγες μέρες και πριν από σχεδόν μισό αιώνα. ανάμεσα στην πόλη και στην θάλασσα, ανάμεσα σε φίλους και στους γείτονες, ανάμεσα σε τη θάλασσα και στις πέτρες σ' το είπα δόξα τω Θεώ που και που έρχομαι και φεύγω όταν θέλω",
   );
 });
 
@@ -132,12 +152,21 @@ test('comma-before-subordinators skips clauses with three or fewer following wor
 });
 
 test('negation trimming still skips gamma-kappa, mu-pi, and nu-tau digraph starts', () => {
-  const result = applyRules('μην γκρινιάζεις μην μπλέξεις δεν ντράπηκα', [
-    'min_negation_trim',
-    'den_negation_trim',
-  ]);
+  const result = applyRules(
+    'μη γκρινιάζεις μη μπλέξεις μη ντράπηκα μη κλαις μη πάψεις μη τρέξεις μη ψάχνεις μη ανοίγεις',
+    ['min_negation_trim'],
+  );
 
-  assert.equal(result.text, 'μην γκρινιάζεις μην μπλέξεις δεν ντράπηκα');
+  assert.equal(
+    result.text,
+    'μην γκρινιάζεις μην μπλέξεις μην ντράπηκα μην κλαις μην πάψεις μην τρέξεις μην ψάχνεις μην ανοίγεις',
+  );
+});
+
+test('min negation rule keeps the fixed phrase "μη αλκοολούχα"', () => {
+  const result = applyRules('μη αλκοολούχα ποτά και μη αλκοολούχα μπύρα', ['min_negation_trim']);
+
+  assert.equal(result.text, 'μη αλκοολούχα ποτά και μη αλκοολούχα μπύρα');
 });
 
 test('orthography family rules normalize βρομιά, αντικρίζω, and κλοτσώ families', () => {
@@ -161,14 +190,53 @@ test('preference rules switch άντρας and αβγό families based on select
   assert.equal(result.text, 'άντρας άντρες αβγό αβγά');
 });
 
+test('preference rules switch επτά, οκτώ, and εννιά families based on selected preference', () => {
+  const result = applyRules(
+    'εφτά οχτώ εννέα',
+    ['epta_preference', 'okto_preference', 'ennia_preference'],
+    {
+      preferences: {
+        eptaStyle: 'epta',
+        oktoStyle: 'okto',
+        enniaStyle: 'ennia',
+      },
+    },
+  );
+
+  assert.equal(result.text, 'επτά οκτώ εννιά');
+});
+
 test('direct orthography replacements normalize standalone words and phrases', () => {
   const result = applyRules(
-    "ωχ ζήλεια κτήριο εταιρία παρ' όλο που παρόλα αυτά περεπιπτόντως συγνώμη μπύρα ξύδι πάρτυ στυλ ξυπόλητος χρονών φύσησε φύσησαν ξεφύσησε ξεφύσησαν με μιας εξ αρχής οκ σιγά-σιγά χέρι-χέρι",
+    "φώς απο ποιό ποιός ποιά ποιού ποιάς μιά δυό τί πιώ πιείς πιεί πιούν μπάς γιός γιό γιοί γιών ναί θές ωπ ωχ ζήλεια κτήριο εταιρία όσο αναφορά απ' ότι υπόψιν υπ' όψιν συντριβάνι ζάμπλουτος συνοθύλευμα εν τέλη εν μέρη χαχα πω πω πωπωω δεί δείς δούν παρ' όλο που παρόλα αυτά περεπιπτόντως συγνώμη μπύρα ξύδι πάρτυ στυλ ξυπόλητος χρονών φύσησε φύσησαν ξεφύσησε ξεφύσησαν με μιας εξ αρχής οκ σιγά-σιγά χέρι-χέρι χθές χτές προχθές γειά μώβ πρωί βράδυ μέρα νύχτα άψε σβήσε πέρα δώθε",
     [
+      'fos_normalize',
+      'apo_tonos_normalize',
+      'poios_family_tonos_normalize',
+      'mia_tonos_normalize',
+      'dyo_tonos_normalize',
+      'ti_tonos_normalize',
+      'pio_family_tonos_normalize',
+      'mpas_normalize',
+      'gios_family_tonos_normalize',
+      'nai_tonos_normalize',
+      'thes_tonos_normalize',
+      'op_interjection_normalize',
       'och_interjection_normalize',
       'zilia_normalize',
       'ktirio_normalize',
       'etaireia_normalize',
+      'oson_afora_normalize',
+      'ap_oti_normalize',
+      'ypopsi_normalize',
+      'sintrivani_normalize',
+      'zaploutos_normalize',
+      'synonthylevma_normalize',
+      'en_telei_normalize',
+      'en_merei_normalize',
+      'haha_spacing_normalize',
+      'popo_normalize',
+      'dei_family_tonos_normalize',
       'parolo_pou_normalize',
       'par_ola_auta_normalize',
       'parempiptontos_normalize',
@@ -182,6 +250,10 @@ test('direct orthography replacements normalize standalone words and phrases', (
       'xefysixe_normalize',
       'me_mias_normalize',
       'ex_archis_normalize',
+      'fixed_hyphenated_phrases_normalize',
+      'xtes_family_normalize',
+      'geia_tonos_normalize',
+      'mov_normalize',
       'ok_uppercase',
       'siga_siga_spacing',
       'cheri_cheri_spacing',
@@ -190,7 +262,7 @@ test('direct orthography replacements normalize standalone words and phrases', (
 
   assert.equal(
     result.text,
-    "οχ ζήλια κτίριο εταιρεία παρόλο που παρ' όλα αυτά παρεμπιπτόντως συγγνώμη μπίρα ξίδι πάρτι στιλ ξυπόλυτος χρόνων φύσηξε φύσηξαν ξεφύσηξε ξεφύσηξαν μεμιάς εξαρχής ΟΚ σιγά σιγά χέρι χέρι",
+    "φως από ποιο ποιος ποια ποιου ποιας μια δυο τι πιω πιεις πιει πιουν μπας γιος γιο γιοι γιων ναι θες οπ οχ ζήλια κτίριο εταιρεία όσον αφορά απ' ό,τι υπόψη υπόψη σιντριβάνι ζάπλουτος συνονθύλευμα εντέλει εν μέρει χα, χα ποπό ποπό δει δεις δουν παρόλο που παρ' όλα αυτά παρεμπιπτόντως συγγνώμη μπίρα ξίδι πάρτι στιλ ξυπόλυτος χρόνων φύσηξε φύσηξαν ξεφύσηξε ξεφύσηξαν μεμιάς εξαρχής ΟΚ σιγά σιγά χέρι χέρι χτες χτες προχτές γεια μοβ πρωί-βράδυ μέρα-νύχτα άψε-σβήσε πέρα-δώθε",
   );
 });
 
@@ -198,6 +270,65 @@ test('orthography family rules also normalize the σκεπτικός family', ()
   const result = applyRules('σκεφτηκός Σκεφτική σκεφτικοί', ['skeptikos_family_normalize']);
 
   assert.equal(result.text, 'σκεπτικός Σκεπτική σκεπτικοί');
+});
+
+test('orthography family rules normalize τρομακτικός family and μυς phrases', () => {
+  const result = applyRules('τρομαχτικό τρομαχτική τους μύες οι μυς τους μεγάλους μύες', [
+    'tromaktikos_family_normalize',
+    'myes_normalize',
+  ]);
+
+  assert.equal(result.text, 'τρομακτικό τρομακτική τους μυς οι μύες τους μεγάλους μυς');
+});
+
+test('orthography family rules normalize δάχτυλα and νύχτα families', () => {
+  const result = applyRules(
+    'δάκτυλα δακτυλίδι δακτυλιδιού δακτύλιος δακτυλογραφούσα νύκτα νυκτερινός κρέμα νυκτός',
+    ['dachtyla_family_normalize', 'nychta_family_normalize'],
+  );
+
+  assert.equal(
+    result.text,
+    'δάχτυλα δαχτυλίδι δαχτυλιδιού δακτύλιος δακτυλογραφούσα νύχτα νυχτερινός κρέμα νυκτός',
+  );
+});
+
+test('orthography family rules normalize αντεπεξέρχομαι and απαθανατίζω families', () => {
+  const result = applyRules('ανταπεξέρχομαι ανταπεξήλθα αποθανατίζω αποθανατίστηκε', [
+    'antepexerxomai_normalize',
+    'apathanatizo_normalize',
+  ]);
+
+  assert.equal(result.text, 'αντεπεξέρχομαι αντεπεξήλθα απαθανατίζω απαθανατίστηκε');
+});
+
+test('orthography family rules normalize νοιώθω and δέχτηκα families', () => {
+  const result = applyRules('Νιώθω νιώσαμε δέχθηκα παραδέχθηκες αποδέχθηκαν', [
+    'niotho_family_normalize',
+    'dechtika_family_normalize',
+  ]);
+
+  assert.equal(result.text, 'Νοιώθω νοιώσαμε δέχτηκα παραδέχτηκες απόδεχτηκαν');
+});
+
+test('orthography family rules normalize the χαιρέτησα family', () => {
+  const result = applyRules('χαιρέτισα χαιρέτισες χαιρέτισε χαιρετίσαμε χαιρετίσατε χαιρέτισαν', [
+    'chairetisa_family_normalize',
+  ]);
+
+  assert.equal(result.text, 'χαιρέτησα χαιρέτησες χαιρέτησε χαιρετήσαμε χαιρετήσατε χαιρέτησαν');
+});
+
+test('nobility titles stay capitalized only at sentence start', () => {
+  const result = applyRules(
+    'Ο Λόρδος μίλησε με τη Βασίλισσα. Λόρδος Αλφρεντ έφυγε. Η Μαρκησία έμεινε.',
+    ['nobility_titles_lowercase'],
+  );
+
+  assert.equal(
+    result.text,
+    'Ο λόρδος μίλησε με τη βασίλισσα. Λόρδος Αλφρεντ έφυγε. Η μαρκησία έμεινε.',
+  );
 });
 
 test('colloquial past progressive rule converts common -αγα endings to -ούσα forms', () => {
@@ -250,12 +381,43 @@ test('normalizeBooksEditorOptions validates supported preferences', () => {
       }),
     (error) => error.code === 'INVALID_RULE_PREFERENCE',
   );
+
+  assert.throws(
+    () =>
+      normalizeBooksEditorOptions({
+        ruleIds: ['epta_preference'],
+        preferences: { eptaStyle: 'invalid' },
+      }),
+    (error) => error.code === 'INVALID_RULE_PREFERENCE',
+  );
+
+  assert.throws(
+    () =>
+      normalizeBooksEditorOptions({
+        ruleIds: ['okto_preference'],
+        preferences: { oktoStyle: 'invalid' },
+      }),
+    (error) => error.code === 'INVALID_RULE_PREFERENCE',
+  );
+
+  assert.throws(
+    () =>
+      normalizeBooksEditorOptions({
+        ruleIds: ['ennia_preference'],
+        preferences: { enniaStyle: 'invalid' },
+      }),
+    (error) => error.code === 'INVALID_RULE_PREFERENCE',
+  );
 });
 
 test('colloquial past progressive rule skips σπάω, σκάω, κλαίω families', () => {
-  const result = applyRules('έσπαγα το ποτήρι, έσκαγε ο τοίχος, έκλαιγε και περπάταγα στο δρόμο', [
-    'colloquial_past_progressive_normalize',
-  ]);
+  const result = applyRules(
+    'έσπαγα το ποτήρι, έσκαγε ο τοίχος, έκλαιγε, διεξήγαγε τη συζήτηση, διεξήγαγα την έρευνα, παρήγαγε έργο, παρήγαγες πολλές ιδέες και περπάταγα στο δρόμο',
+    ['colloquial_past_progressive_normalize'],
+  );
 
-  assert.equal(result.text, 'έσπαγα το ποτήρι, έσκαγε ο τοίχος, έκλαιγε και περπατούσα στο δρόμο');
+  assert.equal(
+    result.text,
+    'έσπαγα το ποτήρι, έσκαγε ο τοίχος, έκλαιγε, διεξήγαγε τη συζήτηση, διεξήγαγα την έρευνα, παρήγαγε έργο, παρήγαγες πολλές ιδέες και περπατούσα στο δρόμο',
+  );
 });

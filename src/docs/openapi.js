@@ -522,7 +522,7 @@ export function buildOpenApiSpec() {
                     editorOptions: {
                       type: 'string',
                       description:
-                        'JSON string. Example: {"ruleIds":["kai_before_vowel","den_negation_trim","quote_period_preference"],"includeReport":true,"preferences":{"andrasStyle":"antras","avgoStyle":"avgo","denNegationStyle":"contextual","quotePeriodStyle":"outside"}}.',
+                        'JSON string. Example: {"ruleIds":["kai_before_vowel","den_negation_trim","epta_preference","quote_period_preference"],"includeReport":true,"preferences":{"andrasStyle":"antras","avgoStyle":"avgo","eptaStyle":"epta","oktoStyle":"okto","enniaStyle":"ennia","denNegationStyle":"contextual","quotePeriodStyle":"outside"}}.',
                     },
                   },
                   required: ['files', 'editorOptions'],
@@ -660,6 +660,18 @@ export function buildOpenApiSpec() {
                             avgoStyle: {
                               type: 'string',
                               enum: ['avgo', 'avgoBeta'],
+                            },
+                            eptaStyle: {
+                              type: 'string',
+                              enum: ['epta', 'efta'],
+                            },
+                            oktoStyle: {
+                              type: 'string',
+                              enum: ['okto', 'oxto'],
+                            },
+                            enniaStyle: {
+                              type: 'string',
+                              enum: ['ennia', 'ennea'],
                             },
                             denNegationStyle: {
                               type: 'string',
@@ -801,7 +813,7 @@ export function buildOpenApiSpec() {
                     editorOptions: {
                       type: 'string',
                       description:
-                        'JSON string. Example: {"ruleIds":["den_negation_trim","quote_period_preference"],"includeReport":true,"preferences":{"andrasStyle":"antras","avgoStyle":"avgo","denNegationStyle":"contextual","quotePeriodStyle":"outside"}}.',
+                        'JSON string. Example: {"ruleIds":["den_negation_trim","epta_preference","quote_period_preference"],"includeReport":true,"preferences":{"andrasStyle":"antras","avgoStyle":"avgo","eptaStyle":"epta","oktoStyle":"okto","enniaStyle":"ennia","denNegationStyle":"contextual","quotePeriodStyle":"outside"}}.',
                     },
                   },
                   required: ['files', 'editorOptions'],
