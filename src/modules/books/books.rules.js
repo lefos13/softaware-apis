@@ -27,6 +27,8 @@ const OPENING_PUNCTUATION = new Set([
 const TRIMMING_CONSONANTS = new Set(['β', 'γ', 'δ', 'ζ', 'θ', 'λ', 'μ', 'ν', 'ρ', 'σ', 'φ', 'χ']);
 const ANDRAS_STYLE_VALUES = new Set(['antras', 'andras']);
 const AVGO_STYLE_VALUES = new Set(['avgo', 'avgoBeta']);
+const DEN_NEGATION_STYLE_VALUES = new Set(['contextual', 'alwaysDen']);
+const QUOTE_PERIOD_STYLE_VALUES = new Set(['inside', 'outside']);
 const COLLOQUIAL_ENDINGS = [
   ['άγανε', 'ούσαν'],
   ['αγανε', 'ούσαν'],
@@ -39,7 +41,114 @@ const COLLOQUIAL_ENDINGS = [
   ['αγε', 'ούσε'],
 ];
 const SENTENCE_END_CHAR_REGEX = /[.!?;…\n]/;
-const COLLOQUIAL_PROGRESSIVE_EXCLUDED_STEMS = ['σπ', 'σκ', 'κλ'];
+const COLLOQUIAL_PROGRESSIVE_EXCLUDED_STEMS = ['σπ', 'σκ'];
+const COMMA_SUBORDINATORS = ['για να', 'όταν', 'γιατί', 'επειδή', 'διότι', 'άμα'];
+const PRIN_BEFORE_FIXED_PHRASES = [
+  ['το', 'μαθημα'],
+  ['τη', 'δουλεια'],
+  ['το', 'ταξιδι'],
+  ['το', 'πρωινο'],
+  ['το', 'μεσημεριανο'],
+  ['το', 'βραδινο'],
+  ['το', 'φθινοπωρο'],
+  ['την', 'ανοιξη'],
+  ['το', 'καλοκαιρι'],
+  ['τον', 'χειμωνα'],
+  ['το', 'φαγητο'],
+  ['τα', 'μεσανυχτα'],
+  ['πολυ', 'καιρο'],
+  ['λιγο', 'καιρο'],
+  ['λιγο'],
+];
+const PRIN_BEFORE_DURATION_UNITS = new Set([
+  'ωρα',
+  'ωρες',
+  'ωρων',
+  'εβδομαδα',
+  'εβδομαδες',
+  'εβδομαδων',
+  'χρονο',
+  'χρονια',
+  'χρονων',
+  'μηνα',
+  'μηνες',
+  'μηνων',
+  'μερα',
+  'μερες',
+  'μερων',
+  'δεκαετια',
+  'δεκαετιες',
+  'δεκαετιων',
+  'αιωνα',
+  'αιωνες',
+  'αιωνων',
+]);
+const PRIN_BEFORE_CLOCK_PERIODS = new Set(['βραδυ', 'πρωι', 'μεσημερι', 'απογευμα', 'νυχτα']);
+const PRIN_BEFORE_BARE_DURATION_UNITS = new Set(['χρονια', 'χρονων', 'μερες', 'μερων']);
+const PRIN_BEFORE_QUANTITY_TOKENS = new Set([
+  'μια',
+  'μιας',
+  'ενας',
+  'εναν',
+  'ενα',
+  'δυο',
+  'δυο',
+  'τρεις',
+  'τεσσερις',
+  'πεντε',
+  'εξι',
+  'επτα',
+  'οχτω',
+  'εννια',
+  'δεκα',
+  'εντεκα',
+  'δωδεκα',
+  'δεκατρια',
+  'δεκατεσσερα',
+  'δεκαπεντε',
+  'δεκαεξι',
+  'δεκαεπτα',
+  'δεκαοχτω',
+  'δεκαεννια',
+  'εικοσι',
+  'τριαντα',
+  'σαραντα',
+  'πενηντα',
+  'εξηντα',
+  'εβδομηντα',
+  'ογδοντα',
+  'ενενηντα',
+  'εκατο',
+  'εκατον',
+  'κατι',
+  'μερικα',
+  'μερικα',
+  'μερικες',
+  'μερικους',
+  'πολυ',
+  'πολλα',
+  'πολλες',
+  'πολλους',
+  'λιγο',
+  'λιγα',
+  'λιγες',
+  'λιγους',
+  'αρκετο',
+  'αρκετα',
+  'αρκετες',
+  'αρκετους',
+  'καμποσο',
+  'καμποσα',
+  'καμποσες',
+  'καμποσους',
+  'σχεδον',
+  'περιπου',
+  'μισο',
+  'μιση',
+  'μισους',
+  'μισους',
+  'πολλαπλα',
+]);
 
 const DIRECT_WORD_REPLACEMENTS = {
   och_interjection_normalize: {
@@ -81,6 +190,10 @@ const DIRECT_WORD_REPLACEMENTS = {
   ok_uppercase: {
     οκ: 'ΟΚ',
   },
+  pou_kai_pou_toning: {
+    'που και που': 'πού και πού',
+    'πως και πως': 'πώς και πώς',
+  },
 };
 
 const DIRECT_PHRASE_REPLACEMENTS = {
@@ -95,6 +208,30 @@ const DIRECT_PHRASE_REPLACEMENTS = {
   },
   cheri_cheri_spacing: {
     'χέρι-χέρι': 'χέρι χέρι',
+  },
+  theos_phrases_normalize: {
+    'δόξα τον θεό': 'δόξα τω θεώ',
+    'δόξα τον Θεό': 'δόξα τω Θεώ',
+    'μα τω θεώ': 'μα τον θεό',
+    'μα τω Θεώ': 'μα τον Θεό',
+  },
+  mesa_sto_contract: {
+    'μέσα στο': 'μες στο',
+    'μέσα στην': 'μες στην',
+    'μέσα στον': 'μες στον',
+  },
+  kathe_enas_series: {
+    'κάθε ένας': 'καθένας',
+    'κάθε μία': 'καθεμία',
+    'κάθε ένα': 'καθένα',
+    'κάθε έναν': 'καθέναν',
+    'κάθε τι': 'καθετί',
+  },
+  me_mias_normalize: {
+    'με μιας': 'μεμιάς',
+  },
+  ex_archis_normalize: {
+    'εξ αρχής': 'εξαρχής',
   },
 };
 
@@ -336,6 +473,69 @@ const normalizeGreekText = (value) =>
     .join('')
     .toLocaleLowerCase(GREEK_LOCALE);
 
+const isSentenceStart = (text, index) => {
+  let cursor = index - 1;
+
+  while (cursor >= 0) {
+    const char = text[cursor];
+    if (
+      char === ' ' ||
+      char === '\t' ||
+      char === '\n' ||
+      char === '\r' ||
+      char === '"' ||
+      char === "'" ||
+      char === '«' ||
+      char === '“' ||
+      char === '‘' ||
+      char === '(' ||
+      char === '[' ||
+      char === '{'
+    ) {
+      cursor -= 1;
+      continue;
+    }
+
+    return SENTENCE_END_CHAR_REGEX.test(char);
+  }
+
+  return true;
+};
+
+const readFollowingGreekLikeTokens = (text, startIndex, maxTokens = 6) => {
+  const tokens = [];
+  let cursor = startIndex;
+
+  while (cursor < text.length && tokens.length < maxTokens) {
+    while (cursor < text.length && /\s/u.test(text[cursor])) {
+      cursor += 1;
+    }
+
+    if (cursor >= text.length || /[.,!?;:…·]/u.test(text[cursor])) {
+      break;
+    }
+
+    const firstChar = text[cursor];
+    if (!isGreekLetter(firstChar) && !/\d/u.test(firstChar)) {
+      break;
+    }
+
+    let end = cursor + 1;
+    while (end < text.length && (isGreekLetter(text[end]) || /\d/u.test(text[end]))) {
+      end += 1;
+    }
+
+    const raw = text.slice(cursor, end);
+    tokens.push({
+      raw,
+      normalized: normalizeGreekText(raw),
+    });
+    cursor = end;
+  }
+
+  return tokens;
+};
+
 const resolveSentenceBounds = (text, start, end) => {
   let sentenceStart = start;
   let sentenceEnd = end;
@@ -529,6 +729,21 @@ function buildDenNegationTrimEdits(text) {
   });
 }
 
+/*
+ * The negation rule now supports either contextual trimming or global "δεν"
+ * normalization so one checkbox can serve both editorial house-style choices.
+ */
+function buildDenNegationPreferenceEdits(text, options) {
+  if (options.preferences.denNegationStyle === 'alwaysDen') {
+    return collectRegexEdits(text, /δε(ν)?/giu, {
+      boundary: 'word',
+      replacementResolver: (match) => applyCasePattern(match[0], 'δεν'),
+    });
+  }
+
+  return buildDenNegationTrimEdits(text);
+}
+
 function buildAkomaBeforeKaiEdits(text) {
   return collectRegexEdits(text, /(ακόμη)(\s+)(και|κι)/giu, {
     boundary: 'word',
@@ -560,6 +775,227 @@ function buildMeSeMenaSenaEdits(text) {
   });
 }
 
+function buildTheosPhraseEdits(text) {
+  return collectRegexEdits(text, /δόξα τον θεό|μα τω θεώ/giu, {
+    boundary: 'word',
+    replacementResolver: (match) => {
+      const source = match[0];
+      const normalized = source.toLocaleLowerCase(GREEK_LOCALE);
+      const baseReplacement = normalized === 'δόξα τον θεό' ? 'δόξα τω θεώ' : 'μα τον θεό';
+      const casedReplacement = applyCasePattern(source, baseReplacement);
+
+      if (source.includes('Θ')) {
+        return casedReplacement.replace('θεώ', 'Θεώ').replace('θεό', 'Θεό');
+      }
+
+      return casedReplacement;
+    },
+  });
+}
+
+/*
+ * These builders cover phrase-sensitive editorial rules that depend on nearby
+ * words, punctuation, or user-selected punctuation preferences instead of
+ * simple one-word substitutions.
+ */
+function buildPrinBeforeTimePhraseEdits(text) {
+  const startsWithPattern = (tokens, pattern) =>
+    pattern.every((part, index) => tokens[index]?.normalized === part);
+  const isQuantityToken = (token) =>
+    Boolean(token) &&
+    (/^\d+$/u.test(token.normalized) || PRIN_BEFORE_QUANTITY_TOKENS.has(token.normalized));
+  const isClockTimePhrase = (tokens) =>
+    tokens[0]?.normalized === 'τις' &&
+    isQuantityToken(tokens[1]) &&
+    (!tokens[2] ||
+      (tokens[2].normalized === 'το' && PRIN_BEFORE_CLOCK_PERIODS.has(tokens[3]?.normalized)));
+  const isDurationPhrase = (tokens) => {
+    const unitIndex = tokens.findIndex(
+      (token, index) => index < 5 && PRIN_BEFORE_DURATION_UNITS.has(token.normalized),
+    );
+    if (unitIndex <= 0) {
+      return false;
+    }
+
+    return tokens.slice(0, unitIndex).every(isQuantityToken);
+  };
+  const isBareDurationPhrase = (tokens) =>
+    PRIN_BEFORE_BARE_DURATION_UNITS.has(tokens[0]?.normalized);
+
+  return collectRegexEdits(text, /πριν/giu, {
+    boundary: 'word',
+    shouldReplace: (_match, value, _start, end) => {
+      const tokens = readFollowingGreekLikeTokens(value, end, 6);
+      return (
+        PRIN_BEFORE_FIXED_PHRASES.some((pattern) => startsWithPattern(tokens, pattern)) ||
+        isDurationPhrase(tokens) ||
+        isBareDurationPhrase(tokens) ||
+        isClockTimePhrase(tokens)
+      );
+    },
+    replacementResolver: (match) => `${match[0]} από`,
+  });
+}
+
+function buildQuestionPouPosToningEdits(text) {
+  const edits = [];
+  const expression = /που|πως/giu;
+
+  for (const match of text.matchAll(expression)) {
+    const source = match[0];
+    const start = match.index;
+    const end = start + source.length;
+
+    if (!isSentenceStart(text, start)) {
+      continue;
+    }
+
+    const { sentenceStart, sentenceEnd } = resolveSentenceBounds(text, start, end);
+    const sentence = text.slice(sentenceStart, sentenceEnd).trim();
+
+    if (!sentence.endsWith(';')) {
+      continue;
+    }
+
+    const body = sentence.slice(source.length);
+    if (/[.!…·:]/u.test(body)) {
+      continue;
+    }
+
+    edits.push({
+      start,
+      end,
+      replacement: applyCasePattern(source, normalizeGreekText(source) === 'που' ? 'πού' : 'πώς'),
+    });
+  }
+
+  return edits;
+}
+
+function buildQuoteCommaTrimEdits(text) {
+  return [...text.matchAll(/»,/g)].map((match) => ({
+    start: match.index,
+    end: match.index + match[0].length,
+    replacement: '»',
+  }));
+}
+
+function buildQuotePeriodPreferenceEdits(text, options) {
+  const style = options.preferences.quotePeriodStyle;
+
+  if (style === 'inside') {
+    return [...text.matchAll(/»\./g)].map((match) => ({
+      start: match.index,
+      end: match.index + match[0].length,
+      replacement: '.»',
+    }));
+  }
+
+  return [...text.matchAll(/\.»/g)].map((match) => ({
+    start: match.index,
+    end: match.index + match[0].length,
+    replacement: '».',
+  }));
+}
+
+function buildCommaBeforeSubordinatorsEdits(text) {
+  const expression = new RegExp(
+    `(${COMMA_SUBORDINATORS.map(escapeRegex)
+      .sort((left, right) => right.length - left.length)
+      .join('|')})`,
+    'gu',
+  );
+
+  return [...text.matchAll(expression)].flatMap((match) => {
+    const termStart = match.index;
+    const end = termStart + match[0].length;
+
+    if (!isStandaloneWord(text, termStart, end)) {
+      return [];
+    }
+
+    if (isSentenceStart(text, termStart)) {
+      return [];
+    }
+
+    let cursor = termStart - 1;
+    while (cursor >= 0 && (text[cursor] === ' ' || text[cursor] === '\t')) {
+      cursor -= 1;
+    }
+
+    if (cursor < 0 || [',', '.', '!', ';', '…', '·', ':'].includes(text[cursor])) {
+      return [];
+    }
+
+    const { sentenceStart } = resolveSentenceBounds(text, termStart, end);
+    const prefix = text.slice(sentenceStart, termStart).trimEnd();
+    const previousWords = Array.from(prefix.matchAll(/[\p{Script=Greek}]+/gu)).map((wordMatch) =>
+      normalizeGreekText(wordMatch[0]),
+    );
+    const suffix = text.slice(end, resolveSentenceBounds(text, termStart, end).sentenceEnd);
+    const followingWords = Array.from(suffix.matchAll(/[\p{Script=Greek}]+/gu)).map((wordMatch) =>
+      normalizeGreekText(wordMatch[0]),
+    );
+
+    if (previousWords.length < 2) {
+      return [];
+    }
+
+    if (followingWords.length <= 3) {
+      return [];
+    }
+
+    const immediatePreviousWord = previousWords[previousWords.length - 1];
+    if (immediatePreviousWord === 'και' || immediatePreviousWord === 'κι') {
+      return [];
+    }
+
+    return [
+      {
+        start: cursor + 1,
+        end,
+        replacement: `, ${match[0]}`,
+      },
+    ];
+  });
+}
+
+function buildAnamesaArticleContractEdits(text) {
+  return collectRegexEdits(
+    text,
+    /ανάμεσα(\s+)(σε|στο|στον|στη|στην)(\s+)([\p{Script=Greek}]+)([\s\S]{0,80}?\s+και\s+)(το|τον|τη|την)(\s+)([\p{Script=Greek}]+)/giu,
+    {
+      boundary: 'word',
+      replacementResolver: (match) => {
+        const replacements = { το: 'στο', τον: 'στον', τη: 'στη', την: 'στην' };
+        return `ανάμεσα${match[1]}${match[2]}${match[3]}${match[4]}${match[5]}${applyCasePattern(match[6], replacements[match[6].toLocaleLowerCase(GREEK_LOCALE)])}${match[7]}${match[8]}`;
+      },
+    },
+  );
+}
+
+function buildStoToContractEdits(text) {
+  const targets = [
+    'είπα',
+    'έδωσα',
+    'έστειλα',
+    'έγραψα',
+    'εξήγησα',
+    'έδειξα',
+    'ζήτησα',
+    'θύμισα',
+    'έφερα',
+    'είχα πει',
+  ];
+
+  const expression = new RegExp(`στο(?=\\s+(?:${targets.map(escapeRegex).join('|')}))`, 'giu');
+
+  return collectRegexEdits(text, expression, {
+    boundary: 'word',
+    replacementResolver: (match) => applyCasePattern(match[0], "σ' το"),
+  });
+}
+
 function buildVromiaFamilyEdits(text) {
   return buildPrefixFamilyEdits(text, [
     ['βρωμ', 'βρομ'],
@@ -579,6 +1015,29 @@ function buildKlotsoFamilyEdits(text) {
     ['κλωτσ', 'κλοτσ'],
     ['κλώτσ', 'κλότσ'],
   ]);
+}
+
+function buildSkeptikosFamilyEdits(text) {
+  return buildPrefixFamilyEdits(text, [
+    ['σκεφτηκ', 'σκεπτικ'],
+    ['σκεφτικ', 'σκεπτικ'],
+    ['σκεφτίκ', 'σκεπτίκ'],
+  ]);
+}
+
+function buildFysixoFamilyEdits(text) {
+  const replacements = {
+    φύσησα: 'φύσηξα',
+    φύσησες: 'φύσηξες',
+    φύσησε: 'φύσηξε',
+    φύσησαν: 'φύσηξαν',
+    ξεφύσησα: 'ξεφύσηξα',
+    ξεφύσησες: 'ξεφύσηξες',
+    ξεφύσησε: 'ξεφύσηξε',
+    ξεφύσησαν: 'ξεφύσηξαν',
+  };
+
+  return buildMappedWordEdits(text, replacements);
 }
 
 function buildAndrasPreferenceEdits(text, options) {
@@ -641,13 +1100,37 @@ export const BOOKS_RULE_REGISTRY = [
   { id: 'ellipsis_normalize', apply: buildEllipsisEdits },
   { id: 'multiple_spaces_normalize', apply: buildMultipleSpacesEdits },
   { id: 'guillemets_normalize', apply: buildGuillemetsEdits },
-  { id: 'den_negation_trim', apply: buildDenNegationTrimEdits },
+  { id: 'den_negation_trim', apply: buildDenNegationPreferenceEdits },
   { id: 'akomi_to_akoma_before_kai', apply: buildAkomaBeforeKaiEdits },
   { id: 'prin_na_to_protou', apply: buildPrinNaToProtouEdits },
   { id: 'me_se_mena_sena_contract', apply: buildMeSeMenaSenaEdits },
+  { id: 'prin_before_time_phrase', apply: buildPrinBeforeTimePhraseEdits },
+  { id: 'question_pou_pos_toning', apply: buildQuestionPouPosToningEdits },
+  { id: 'quote_comma_trim', apply: buildQuoteCommaTrimEdits },
+  { id: 'quote_period_preference', apply: buildQuotePeriodPreferenceEdits },
+  {
+    id: 'mesa_sto_contract',
+    apply: (text) => buildMappedPhraseEdits(text, DIRECT_PHRASE_REPLACEMENTS.mesa_sto_contract),
+  },
+  {
+    id: 'kathe_enas_series',
+    apply: (text) => buildMappedPhraseEdits(text, DIRECT_PHRASE_REPLACEMENTS.kathe_enas_series),
+  },
+  {
+    id: 'pou_kai_pou_toning',
+    apply: (text) => buildMappedPhraseEdits(text, DIRECT_WORD_REPLACEMENTS.pou_kai_pou_toning),
+  },
+  {
+    id: 'theos_phrases_normalize',
+    apply: buildTheosPhraseEdits,
+  },
+  { id: 'comma_before_subordinators', apply: buildCommaBeforeSubordinatorsEdits },
+  { id: 'anamesa_article_contract', apply: buildAnamesaArticleContractEdits },
+  { id: 'sto_to_contract', apply: buildStoToContractEdits },
   { id: 'vromia_family_omicron', apply: buildVromiaFamilyEdits },
   { id: 'antikrizo_family_iota', apply: buildAntikrizoFamilyEdits },
   { id: 'klotso_family_omicron', apply: buildKlotsoFamilyEdits },
+  { id: 'skeptikos_family_normalize', apply: buildSkeptikosFamilyEdits },
   { id: 'andras_preference', apply: buildAndrasPreferenceEdits },
   {
     id: 'och_interjection_normalize',
@@ -707,6 +1190,18 @@ export const BOOKS_RULE_REGISTRY = [
   {
     id: 'chronon_normalize',
     apply: (text) => buildMappedWordEdits(text, DIRECT_WORD_REPLACEMENTS.chronon_normalize),
+  },
+  {
+    id: 'xefysixe_normalize',
+    apply: buildFysixoFamilyEdits,
+  },
+  {
+    id: 'me_mias_normalize',
+    apply: (text) => buildMappedPhraseEdits(text, DIRECT_PHRASE_REPLACEMENTS.me_mias_normalize),
+  },
+  {
+    id: 'ex_archis_normalize',
+    apply: (text) => buildMappedPhraseEdits(text, DIRECT_PHRASE_REPLACEMENTS.ex_archis_normalize),
   },
   { id: 'colloquial_past_progressive_normalize', apply: buildColloquialPastProgressiveEdits },
   {
@@ -788,6 +1283,8 @@ export const normalizeBooksEditorOptions = (editorOptions) => {
       : {};
   const andrasStyle = String(rawPreferences.andrasStyle || 'antras').trim();
   const avgoStyle = String(rawPreferences.avgoStyle || 'avgo').trim();
+  const denNegationStyle = String(rawPreferences.denNegationStyle || 'contextual').trim();
+  const quotePeriodStyle = String(rawPreferences.quotePeriodStyle || 'outside').trim();
 
   if (!ANDRAS_STYLE_VALUES.has(andrasStyle)) {
     throw new ApiError(400, 'INVALID_RULE_PREFERENCE', 'Unsupported andrasStyle preference', {
@@ -811,12 +1308,36 @@ export const normalizeBooksEditorOptions = (editorOptions) => {
     });
   }
 
+  if (!DEN_NEGATION_STYLE_VALUES.has(denNegationStyle)) {
+    throw new ApiError(400, 'INVALID_RULE_PREFERENCE', 'Unsupported denNegationStyle preference', {
+      details: [
+        {
+          field: 'editorOptions.preferences.denNegationStyle',
+          issue: 'Allowed values are contextual, alwaysDen',
+        },
+      ],
+    });
+  }
+
+  if (!QUOTE_PERIOD_STYLE_VALUES.has(quotePeriodStyle)) {
+    throw new ApiError(400, 'INVALID_RULE_PREFERENCE', 'Unsupported quotePeriodStyle preference', {
+      details: [
+        {
+          field: 'editorOptions.preferences.quotePeriodStyle',
+          issue: 'Allowed values are inside, outside',
+        },
+      ],
+    });
+  }
+
   return {
     ruleIds: uniqueRuleIds,
     includeReport: editorOptions.includeReport === true,
     preferences: {
       andrasStyle,
       avgoStyle,
+      denNegationStyle,
+      quotePeriodStyle,
     },
     normalized: true,
   };

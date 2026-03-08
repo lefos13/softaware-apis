@@ -522,7 +522,7 @@ export function buildOpenApiSpec() {
                     editorOptions: {
                       type: 'string',
                       description:
-                        'JSON string. Example: {"ruleIds":["kai_before_vowel","ellipsis_normalize"],"includeReport":true,"preferences":{"andrasStyle":"antras","avgoStyle":"avgo"}}.',
+                        'JSON string. Example: {"ruleIds":["kai_before_vowel","den_negation_trim","quote_period_preference"],"includeReport":true,"preferences":{"andrasStyle":"antras","avgoStyle":"avgo","denNegationStyle":"contextual","quotePeriodStyle":"outside"}}.',
                     },
                   },
                   required: ['files', 'editorOptions'],
@@ -661,6 +661,14 @@ export function buildOpenApiSpec() {
                               type: 'string',
                               enum: ['avgo', 'avgoBeta'],
                             },
+                            denNegationStyle: {
+                              type: 'string',
+                              enum: ['contextual', 'alwaysDen'],
+                            },
+                            quotePeriodStyle: {
+                              type: 'string',
+                              enum: ['inside', 'outside'],
+                            },
                           },
                         },
                       },
@@ -793,7 +801,7 @@ export function buildOpenApiSpec() {
                     editorOptions: {
                       type: 'string',
                       description:
-                        'JSON string. Example: {"ruleIds":["kai_before_vowel"],"includeReport":true,"preferences":{"andrasStyle":"antras","avgoStyle":"avgo"}}.',
+                        'JSON string. Example: {"ruleIds":["den_negation_trim","quote_period_preference"],"includeReport":true,"preferences":{"andrasStyle":"antras","avgoStyle":"avgo","denNegationStyle":"contextual","quotePeriodStyle":"outside"}}.',
                     },
                   },
                   required: ['files', 'editorOptions'],

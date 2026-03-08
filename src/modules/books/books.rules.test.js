@@ -37,6 +37,100 @@ test('new literary rules normalize spacing, guillemets, δεν, ακόμα, πρ
   assert.equal(result.text, "«δε βγαίνω» ακόμα και προτού πω μ' εμένα και σ' εσένα");
 });
 
+test('den negation rule supports global δεν preference', () => {
+  const result = applyRules('δε βγαίνω και δεν μένω', ['den_negation_trim'], {
+    preferences: { denNegationStyle: 'alwaysDen' },
+  });
+
+  assert.equal(result.text, 'δεν βγαίνω και δεν μένω');
+});
+
+test('new literary phrase replacements normalize μέσα στο, κάθε ένας, με μιας, and εξ αρχής', () => {
+  const result = applyRules('μέσα στο σπίτι κάθε ένας με μιας και εξ αρχής το ξέρει', [
+    'mesa_sto_contract',
+    'kathe_enas_series',
+    'me_mias_normalize',
+    'ex_archis_normalize',
+  ]);
+
+  assert.equal(result.text, 'μες στο σπίτι καθένας μεμιάς και εξαρχής το ξέρει');
+});
+
+test('new literary phrase rules normalize before-phrases, quote punctuation, syntax phrases, and fixed contractions', () => {
+  const result = applyRules(
+    'Πριν το μάθημα είπε: «Γύρισα»,. Θα φύγω πριν δεκαπέντε χρόνια και πριν τις δέκα το βράδυ. Ήταν πριν πολύ καιρό, πριν τέσσερις δεκαετίες, πριν κάτι μήνες, πριν πολλά πολλά χρόνια, πριν λίγες μέρες και πριν σχεδόν μισό αιώνα. ανάμεσα στην πόλη και την θάλασσα στο είπα δόξα τον Θεό που και που έρχομαι και φεύγω όταν θέλω',
+    [
+      'prin_before_time_phrase',
+      'quote_comma_trim',
+      'theos_phrases_normalize',
+      'comma_before_subordinators',
+      'anamesa_article_contract',
+      'sto_to_contract',
+    ],
+  );
+
+  assert.equal(
+    result.text,
+    "Πριν από το μάθημα είπε: «Γύρισα». Θα φύγω πριν από δεκαπέντε χρόνια και πριν από τις δέκα το βράδυ. Ήταν πριν από πολύ καιρό, πριν από τέσσερις δεκαετίες, πριν από κάτι μήνες, πριν από πολλά πολλά χρόνια, πριν από λίγες μέρες και πριν από σχεδόν μισό αιώνα. ανάμεσα στην πόλη και στην θάλασσα σ' το είπα δόξα τω Θεώ που και που έρχομαι και φεύγω όταν θέλω",
+  );
+});
+
+test('prin_before_time_phrase also covers short time expressions and embedded clauses', () => {
+  const result = applyRules(
+    'πριν λίγο καιρό, πριν μέρες, πριν λίγο είπες, πριν λίγο το έφτιαξα, πριν χρόνια, μέχρι πριν λίγο το ήξερα',
+    ['prin_before_time_phrase'],
+  );
+
+  assert.equal(
+    result.text,
+    'πριν από λίγο καιρό, πριν από μέρες, πριν από λίγο είπες, πριν από λίγο το έφτιαξα, πριν από χρόνια, μέχρι πριν από λίγο το ήξερα',
+  );
+});
+
+test('question opening words, repeated phrase toning, and quote-period preference apply correctly', () => {
+  const result = applyRules(
+    'Που πήγες; πως και πως σε περίμενα. Το δωμάτιο μου είπε «γύρνα».',
+    ['question_pou_pos_toning', 'pou_kai_pou_toning', 'quote_period_preference'],
+    {
+      preferences: { quotePeriodStyle: 'inside' },
+    },
+  );
+
+  assert.equal(result.text, 'Πού πήγες; πώς και πώς σε περίμενα. Το δωμάτιο μου είπε «γύρνα.»');
+});
+
+test('comma-before-subordinators only changes standalone words and not word fragments', () => {
+  const result = applyRules('Ο Γκέχαρντ Μίλερ ήταν χαρούμενος αλλά έφυγε όταν νύχτωσε.', [
+    'comma_before_subordinators',
+  ]);
+
+  assert.equal(result.text, 'Ο Γκέχαρντ Μίλερ ήταν χαρούμενος αλλά έφυγε όταν νύχτωσε.');
+});
+
+test('comma-before-subordinators skips excluded terms, short prefixes, and και/κι prefixes', () => {
+  const result = applyRules(
+    'Θα φύγω μέχρι νυχτώσει. Είπε αν θέλεις. Ρώτησε εάν προλαβαίνεις. Έφυγα όταν νύχτωσε. Γύρισα και όταν έφτασε σώπασα. Μίλησα κι όταν έμαθα περισσότερα.',
+    ['comma_before_subordinators'],
+  );
+
+  assert.equal(
+    result.text,
+    'Θα φύγω μέχρι νυχτώσει. Είπε αν θέλεις. Ρώτησε εάν προλαβαίνεις. Έφυγα όταν νύχτωσε. Γύρισα και όταν έφτασε σώπασα. Μίλησα κι όταν έμαθα περισσότερα.',
+  );
+});
+
+test('comma-before-subordinators skips clauses with three or fewer following words', () => {
+  const result = applyRules(
+    'Γύρισα αργά όταν νύχτωσε πολύ. Μίλησα ήρεμα γιατί το ήθελα πραγματικά.',
+    ['comma_before_subordinators'],
+  );
+
+  assert.equal(
+    result.text,
+    'Γύρισα αργά όταν νύχτωσε πολύ. Μίλησα ήρεμα γιατί το ήθελα πραγματικά.',
+  );
+});
+
 test('negation trimming still skips gamma-kappa, mu-pi, and nu-tau digraph starts', () => {
   const result = applyRules('μην γκρινιάζεις μην μπλέξεις δεν ντράπηκα', [
     'min_negation_trim',
@@ -69,7 +163,7 @@ test('preference rules switch άντρας and αβγό families based on select
 
 test('direct orthography replacements normalize standalone words and phrases', () => {
   const result = applyRules(
-    "ωχ ζήλεια κτήριο εταιρία παρ' όλο που παρόλα αυτά περεπιπτόντως συγνώμη μπύρα ξύδι πάρτυ στυλ ξυπόλητος χρονών οκ σιγά-σιγά χέρι-χέρι",
+    "ωχ ζήλεια κτήριο εταιρία παρ' όλο που παρόλα αυτά περεπιπτόντως συγνώμη μπύρα ξύδι πάρτυ στυλ ξυπόλητος χρονών φύσησε φύσησαν ξεφύσησε ξεφύσησαν με μιας εξ αρχής οκ σιγά-σιγά χέρι-χέρι",
     [
       'och_interjection_normalize',
       'zilia_normalize',
@@ -85,6 +179,9 @@ test('direct orthography replacements normalize standalone words and phrases', (
       'stil_normalize',
       'xipolytos_normalize',
       'chronon_normalize',
+      'xefysixe_normalize',
+      'me_mias_normalize',
+      'ex_archis_normalize',
       'ok_uppercase',
       'siga_siga_spacing',
       'cheri_cheri_spacing',
@@ -93,8 +190,14 @@ test('direct orthography replacements normalize standalone words and phrases', (
 
   assert.equal(
     result.text,
-    "οχ ζήλια κτίριο εταιρεία παρόλο που παρ' όλα αυτά παρεμπιπτόντως συγγνώμη μπίρα ξίδι πάρτι στιλ ξυπόλυτος χρόνων ΟΚ σιγά σιγά χέρι χέρι",
+    "οχ ζήλια κτίριο εταιρεία παρόλο που παρ' όλα αυτά παρεμπιπτόντως συγγνώμη μπίρα ξίδι πάρτι στιλ ξυπόλυτος χρόνων φύσηξε φύσηξαν ξεφύσηξε ξεφύσηξαν μεμιάς εξαρχής ΟΚ σιγά σιγά χέρι χέρι",
   );
+});
+
+test('orthography family rules also normalize the σκεπτικός family', () => {
+  const result = applyRules('σκεφτηκός Σκεφτική σκεφτικοί', ['skeptikos_family_normalize']);
+
+  assert.equal(result.text, 'σκεπτικός Σκεπτική σκεπτικοί');
 });
 
 test('colloquial past progressive rule converts common -αγα endings to -ούσα forms', () => {
@@ -126,6 +229,24 @@ test('normalizeBooksEditorOptions validates supported preferences', () => {
       normalizeBooksEditorOptions({
         ruleIds: ['andras_preference'],
         preferences: { andrasStyle: 'invalid' },
+      }),
+    (error) => error.code === 'INVALID_RULE_PREFERENCE',
+  );
+
+  assert.throws(
+    () =>
+      normalizeBooksEditorOptions({
+        ruleIds: ['quote_period_preference'],
+        preferences: { quotePeriodStyle: 'invalid' },
+      }),
+    (error) => error.code === 'INVALID_RULE_PREFERENCE',
+  );
+
+  assert.throws(
+    () =>
+      normalizeBooksEditorOptions({
+        ruleIds: ['den_negation_trim'],
+        preferences: { denNegationStyle: 'invalid' },
       }),
     (error) => error.code === 'INVALID_RULE_PREFERENCE',
   );
