@@ -205,6 +205,14 @@ test('comma-before-subordinators does not check "άμα" anymore', () => {
   assert.equal(result.text, 'Έμεινα σπίτι άμα έβρεχε πολύ όλη μέρα.');
 });
 
+test('comma-before-subordinators does not check "όταν" anymore', () => {
+  const result = applyRules('Έφυγα νωρίς όταν άρχισε η δυνατή βροχή.', [
+    'comma_before_subordinators',
+  ]);
+
+  assert.equal(result.text, 'Έφυγα νωρίς όταν άρχισε η δυνατή βροχή.');
+});
+
 test('negation trimming still skips gamma-kappa, mu-pi, and nu-tau digraph starts', () => {
   const result = applyRules(
     'μη γκρινιάζεις μη μπλέξεις μη ντράπηκα μη κλαις μη πάψεις μη τρέξεις μη ψάχνεις μη ανοίγεις',

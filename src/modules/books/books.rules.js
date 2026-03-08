@@ -46,7 +46,7 @@ const COLLOQUIAL_ENDINGS = [
 const SENTENCE_END_CHAR_REGEX = /[.!?;…\n]/;
 const COLLOQUIAL_PROGRESSIVE_EXCLUDED_STEMS = ['σπ', 'σκ'];
 const COLLOQUIAL_PROGRESSIVE_EXCLUDED_WORD_STEMS = new Set(['διεξηγ', 'παρηγ', 'αχορτ', 'απηγ']);
-const COMMA_SUBORDINATORS = ['για να', 'όταν', 'γιατί', 'επειδή', 'διότι'];
+const COMMA_SUBORDINATORS = ['για να', 'γιατί', 'επειδή', 'διότι'];
 const PRIN_BEFORE_FIXED_PHRASES = [
   ['το', 'μαθημα'],
   ['τη', 'δουλεια'],
