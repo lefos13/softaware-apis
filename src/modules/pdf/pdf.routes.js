@@ -1,4 +1,5 @@
 import { initializeTaskProgress } from '../../common/middleware/task-context.js';
+import { requireTrustedClient } from '../../common/middleware/trusted-client.middleware.js';
 import { Router } from 'express';
 import { mergePdfController, splitPdfController } from './pdf.controller.js';
 import { extractPdfToDocxController } from './pdf-extract.controller.js';
@@ -12,6 +13,8 @@ import {
 import { pdfFromImagesUpload, pdfUpload, pdfWatermarkUpload } from './pdf.upload.js';
 
 const pdfRouter = Router();
+
+pdfRouter.use(requireTrustedClient);
 
 pdfRouter.post(
   '/merge',

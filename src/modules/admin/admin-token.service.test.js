@@ -1,0 +1,105 @@
+/*
+ * Token service tests pin the new superadmin bootstrap flow and the access
+ * token lifecycle so store migrations and editor auth checks do not regress.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { env } from '../../config/env.js';
+import { ACCESS_TOKEN_SERVICE_FLAGS } from './admin-token.constants.js';
+import {
+  createAccessToken,
+  createSuperAdminToken,
+  extendAccessToken,
+  listAccessTokens,
+  parseTokenTtl,
+  renewAccessToken,
+  resolveStoredToken,
+  revokeAccessToken,
+  updateAccessToken,
+} from './admin-token.service.js';
+
+const originalStoreFile = env.adminTokenStoreFile;
+const originalPepper = env.adminTokenPepper;
+const testStoreFile = resolve(process.cwd(), 'tmp', 'admin-token-service.test.json');
+
+const resetStore = () => {
+  if (existsSync(testStoreFile)) {
+    rmSync(testStoreFile, { force: true });
+  }
+};
+
+test.before(() => {
+  mkdirSync(dirname(testStoreFile), { recursive: true });
+  env.adminTokenStoreFile = testStoreFile;
+  env.adminTokenPepper = 'test-pepper';
+  resetStore();
+});
+
+test.after(() => {
+  resetStore();
+  env.adminTokenStoreFile = originalStoreFile;
+  env.adminTokenPepper = originalPepper;
+});
+
+test('CLI superadmin creation and access-token lifecycle work end to end', () => {
+  resetStore();
+
+  const superadmin = createSuperAdminToken({
+    alias: 'Primary superadmin',
+    ttlSeconds: parseTokenTtl('30d'),
+  });
+  assert.equal(superadmin.tokenType, 'superadmin');
+  assert.equal(resolveStoredToken(superadmin.token)?.record?.tokenType, 'superadmin');
+
+  const created = createAccessToken({
+    alias: 'Books editor',
+    serviceFlags: [ACCESS_TOKEN_SERVICE_FLAGS.BOOKS_GREEK_EDITOR],
+    ttlSeconds: parseTokenTtl('30d'),
+    actorTokenId: superadmin.tokenId,
+  });
+
+  assert.equal(created.record.alias, 'Books editor');
+  assert.deepEqual(created.record.serviceFlags, [ACCESS_TOKEN_SERVICE_FLAGS.BOOKS_GREEK_EDITOR]);
+
+  const listedBeforeRevoke = listAccessTokens();
+  assert.equal(listedBeforeRevoke.count, 1);
+  assert.equal(listedBeforeRevoke.tokens[0].tokenType, 'access');
+  assert.equal(resolveStoredToken(created.token)?.status, 'active');
+
+  const updated = updateAccessToken({
+    tokenId: created.record.tokenId,
+    alias: 'Books editor updated',
+    serviceFlags: [ACCESS_TOKEN_SERVICE_FLAGS.BOOKS_GREEK_EDITOR, ACCESS_TOKEN_SERVICE_FLAGS.PDF],
+  });
+  assert.equal(updated.alias, 'Books editor updated');
+  assert.deepEqual(updated.serviceFlags, [
+    ACCESS_TOKEN_SERVICE_FLAGS.BOOKS_GREEK_EDITOR,
+    ACCESS_TOKEN_SERVICE_FLAGS.PDF,
+  ]);
+
+  const revoked = revokeAccessToken({
+    tokenId: created.record.tokenId,
+    actorTokenId: superadmin.tokenId,
+  });
+  assert.equal(revoked.isRevoked, true);
+  assert.equal(resolveStoredToken(created.token)?.status, 'revoked');
+
+  const renewed = renewAccessToken({
+    tokenId: created.record.tokenId,
+    ttlSeconds: parseTokenTtl('14d'),
+    actorTokenId: superadmin.tokenId,
+  });
+  assert.ok(renewed.token);
+  assert.equal(renewed.record.isActive, true);
+  assert.equal(resolveStoredToken(renewed.token)?.status, 'active');
+
+  const extended = extendAccessToken({
+    tokenId: created.record.tokenId,
+    ttlSeconds: parseTokenTtl('7d'),
+    actorTokenId: superadmin.tokenId,
+  });
+  assert.equal(extended.isActive, true);
+  assert.ok(Date.parse(extended.expiresAt) > Date.parse(renewed.record.expiresAt));
+});

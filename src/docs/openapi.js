@@ -3,6 +3,7 @@
  * frontend stays aligned with backend validation, binary outputs, and JSON APIs.
  */
 import { env } from '../config/env.js';
+import { ACCESS_TOKEN_SERVICE_FLAG_LIST } from '../modules/admin/admin-token.constants.js';
 
 const maxFileSizeMb = Math.floor(env.maxFileSizeBytes / (1024 * 1024));
 const maxTotalUploadMb = Math.floor(env.maxTotalUploadBytes / (1024 * 1024));
@@ -118,6 +119,23 @@ export function buildOpenApiSpec() {
             },
             400: {
               description: 'Input validation error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            401: {
+              description: 'Missing service token',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            403: {
+              description:
+                'Service token is invalid, expired, revoked, or missing the books_greek_editor flag',
               content: {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/ErrorResponse' },
@@ -490,11 +508,65 @@ export function buildOpenApiSpec() {
           },
         },
       },
+      '/api/books/greek-editor/access': {
+        get: {
+          tags: ['Books'],
+          summary: 'Validate editor token access for the Books Greek editor',
+          description:
+            'Validates the `x-service-token` used by the Books Greek editor login step and returns the token metadata needed to restore a browser session. In non-production environments this route can be bypassed by setting `BOOKS_EDITOR_TOKEN_AUTH_ENABLED=false`; production always enforces token validation.',
+          operationId: 'validateGreekEditorAccess',
+          parameters: [
+            {
+              name: 'x-service-token',
+              in: 'header',
+              required: false,
+              schema: { type: 'string' },
+              description:
+                'Access token created by a superadmin. Required in production and whenever the non-production editor auth flag remains enabled. The token must include the `books_greek_editor` service flag.',
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Editor access is available for the current browser session',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/BooksGreekEditorAccessSuccessResponse' },
+                },
+              },
+            },
+            401: {
+              description: 'Missing service token while editor auth is enabled',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+              },
+            },
+            403: {
+              description:
+                'Service token is invalid, expired, revoked, or missing the books_greek_editor flag',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+              },
+            },
+            404: {
+              description: 'Books Greek editor feature is disabled',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+              },
+            },
+            500: {
+              description: 'Unexpected server error',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+              },
+            },
+          },
+        },
+      },
       '/api/books/greek-editor/apply': {
         post: {
           tags: ['Books'],
           summary: 'Apply Greek literature editing rules to one Word (.docx) manuscript',
-          description: `Upload exactly one DOCX in \`files\` plus required \`editorOptions\` JSON. The service edits only the main body text of \`word/document.xml\`, applies the selected rules in fixed server order, and returns one corrected DOCX. If \`editorOptions.includeReport=true\`, the response is a ZIP package containing the corrected DOCX plus text and JSON change reports. Limits: ${env.maxUploadFiles} files, ${maxFileSizeMb} MB each, ${maxTotalUploadMb} MB total.`,
+          description: `Upload exactly one DOCX in \`files\` plus required \`editorOptions\` JSON. The service edits only the main body text of \`word/document.xml\`, applies the selected rules in fixed server order, and returns one corrected DOCX. If \`editorOptions.includeReport=true\`, the response is a ZIP package containing the corrected DOCX plus text and JSON change reports. Production requires \`x-service-token\` with the \`books_greek_editor\` service flag; non-production can bypass it only when \`BOOKS_EDITOR_TOKEN_AUTH_ENABLED=false\`. Limits: ${env.maxUploadFiles} files, ${maxFileSizeMb} MB each, ${maxTotalUploadMb} MB total.`,
           operationId: 'applyGreekEditorRules',
           parameters: [
             {
@@ -504,6 +576,14 @@ export function buildOpenApiSpec() {
               schema: { type: 'string' },
               description:
                 'Optional client-provided task id used for progress polling. If omitted, backend generates one.',
+            },
+            {
+              name: 'x-service-token',
+              in: 'header',
+              required: false,
+              schema: { type: 'string' },
+              description:
+                'Access token created by a superadmin. Required in production and whenever the non-production editor auth flag remains enabled. The token must include the `books_greek_editor` service flag.',
             },
           ],
           requestBody: {
@@ -568,6 +648,23 @@ export function buildOpenApiSpec() {
                 },
               },
             },
+            401: {
+              description: 'Missing service token',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            403: {
+              description:
+                'Service token is invalid, expired, revoked, or missing the books_greek_editor flag',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
             413: {
               description: 'Upload exceeds per-file or total-size constraints',
               content: {
@@ -616,7 +713,7 @@ export function buildOpenApiSpec() {
           tags: ['Books'],
           summary: 'Apply Greek literature editing rules to pasted text',
           description:
-            'Send JSON with `inputText` and `editorOptions`. The service applies the selected rules in fixed server order and returns corrected text, summary counts, and optional detailed report content.',
+            'Send JSON with `inputText` and `editorOptions`. The service applies the selected rules in fixed server order and returns corrected text, summary counts, and optional detailed report content. Production requires `x-service-token` with the `books_greek_editor` service flag; non-production can bypass it only when `BOOKS_EDITOR_TOKEN_AUTH_ENABLED=false`.',
           operationId: 'applyGreekEditorRulesToText',
           parameters: [
             {
@@ -626,6 +723,14 @@ export function buildOpenApiSpec() {
               schema: { type: 'string' },
               description:
                 'Optional client-provided task id used for progress polling. If omitted, backend generates one.',
+            },
+            {
+              name: 'x-service-token',
+              in: 'header',
+              required: false,
+              schema: { type: 'string' },
+              description:
+                'Access token created by a superadmin. Required in production and whenever the non-production editor auth flag remains enabled. The token must include the `books_greek_editor` service flag.',
             },
           ],
           requestBody: {
@@ -753,6 +858,23 @@ export function buildOpenApiSpec() {
                 },
               },
             },
+            401: {
+              description: 'Missing service token',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            403: {
+              description:
+                'Service token is invalid, expired, revoked, or missing the books_greek_editor flag',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
             404: {
               description: 'Feature disabled',
               content: {
@@ -785,7 +907,7 @@ export function buildOpenApiSpec() {
           tags: ['Books'],
           summary: 'Generate a JSON report preview for one Word (.docx) manuscript',
           description:
-            'Upload exactly one DOCX in `files` plus `editorOptions` JSON and receive a JSON preview of the report that would accompany the corrected manuscript package.',
+            'Upload exactly one DOCX in `files` plus `editorOptions` JSON and receive a JSON preview of the report that would accompany the corrected manuscript package. Production requires `x-service-token` with the `books_greek_editor` service flag; non-production can bypass it only when `BOOKS_EDITOR_TOKEN_AUTH_ENABLED=false`.',
           operationId: 'previewGreekEditorReport',
           parameters: [
             {
@@ -795,6 +917,14 @@ export function buildOpenApiSpec() {
               schema: { type: 'string' },
               description:
                 'Optional client-provided task id used for progress polling. If omitted, backend generates one.',
+            },
+            {
+              name: 'x-service-token',
+              in: 'header',
+              required: false,
+              schema: { type: 'string' },
+              description:
+                'Access token created by a superadmin. Required in production and whenever the non-production editor auth flag remains enabled. The token must include the `books_greek_editor` service flag.',
             },
           ],
           requestBody: {
@@ -1930,7 +2060,7 @@ export function buildOpenApiSpec() {
           tags: ['Admin'],
           summary: 'List API failure reports',
           description:
-            'Lists most recent request-failure reports generated by backend error logging middleware. Non-superadmin tokens only receive reports in their owner scope.',
+            'Lists most recent request-failure reports generated by backend error logging middleware. This endpoint is restricted to superadmin tokens.',
           operationId: 'listFailureReports',
           parameters: [
             {
@@ -1938,7 +2068,7 @@ export function buildOpenApiSpec() {
               in: 'header',
               required: true,
               schema: { type: 'string' },
-              description: 'Admin or superadmin token minted via server-side CLI.',
+              description: 'Superadmin token minted via server-side CLI.',
             },
             {
               name: 'limit',
@@ -1997,7 +2127,7 @@ export function buildOpenApiSpec() {
           tags: ['Admin'],
           summary: 'Get full sanitized API failure report details',
           description:
-            'Fetches one sanitized report payload by file name from logs/failures, scoped by admin token owner unless token role is superadmin.',
+            'Fetches one sanitized report payload by file name from logs/failures. This endpoint is restricted to superadmin tokens.',
           operationId: 'getFailureReportByFileName',
           parameters: [
             {
@@ -2005,7 +2135,7 @@ export function buildOpenApiSpec() {
               in: 'header',
               required: true,
               schema: { type: 'string' },
-              description: 'Admin or superadmin token minted via server-side CLI.',
+              description: 'Superadmin token minted via server-side CLI.',
             },
             {
               name: 'fileName',
@@ -2041,7 +2171,7 @@ export function buildOpenApiSpec() {
               },
             },
             403: {
-              description: 'Invalid token or report outside owner scope',
+              description: 'Invalid token or token role is not superadmin',
               content: {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/ErrorResponse' },
@@ -2070,10 +2200,10 @@ export function buildOpenApiSpec() {
       '/api/admin/tokens': {
         get: {
           tags: ['Admin'],
-          summary: 'List admin tokens',
+          summary: 'List access tokens',
           description:
-            'Lists admin and superadmin token metadata for superadmin session management. Plaintext tokens and stored hashes are never returned.',
-          operationId: 'listAdminTokens',
+            'Lists access-token metadata for the superadmin management screen. Plaintext tokens and stored hashes are never returned.',
+          operationId: 'listAccessTokens',
           parameters: [
             {
               name: 'x-admin-token',
@@ -2085,15 +2215,15 @@ export function buildOpenApiSpec() {
           ],
           responses: {
             200: {
-              description: 'Admin token inventory',
+              description: 'Access token inventory',
               content: {
                 'application/json': {
-                  schema: { $ref: '#/components/schemas/AdminTokensListSuccessResponse' },
+                  schema: { $ref: '#/components/schemas/AccessTokensListSuccessResponse' },
                 },
               },
             },
             401: {
-              description: 'Missing admin token',
+              description: 'Missing superadmin token',
               content: {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/ErrorResponse' },
@@ -2118,14 +2248,12 @@ export function buildOpenApiSpec() {
             },
           },
         },
-      },
-      '/api/admin/tokens/revoke': {
         post: {
           tags: ['Admin'],
-          summary: 'Revoke selected admin tokens',
+          summary: 'Create an access token',
           description:
-            'Revokes one or many admin or superadmin tokens by token id. This endpoint is restricted to superadmin tokens.',
-          operationId: 'revokeAdminTokens',
+            'Creates a new access token with a user-defined alias, TTL, and one or more service flags. Superadmin tokens cannot be created from the UI.',
+          operationId: 'createAccessToken',
           parameters: [
             {
               name: 'x-admin-token',
@@ -2139,21 +2267,21 @@ export function buildOpenApiSpec() {
             required: true,
             content: {
               'application/json': {
-                schema: { $ref: '#/components/schemas/AdminTokenRevokeRequest' },
+                schema: { $ref: '#/components/schemas/AccessTokenCreateRequest' },
               },
             },
           },
           responses: {
-            200: {
-              description: 'Selected tokens revoked successfully',
+            201: {
+              description: 'Access token created successfully',
               content: {
                 'application/json': {
-                  schema: { $ref: '#/components/schemas/AdminTokenRevokeSuccessResponse' },
+                  schema: { $ref: '#/components/schemas/AccessTokenSecretSuccessResponse' },
                 },
               },
             },
             400: {
-              description: 'Missing or invalid tokenIds payload',
+              description: 'Invalid alias, ttl, or serviceFlags payload',
               content: {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/ErrorResponse' },
@@ -2161,7 +2289,7 @@ export function buildOpenApiSpec() {
               },
             },
             401: {
-              description: 'Missing admin token',
+              description: 'Missing superadmin token',
               content: {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/ErrorResponse' },
@@ -2203,13 +2331,13 @@ export function buildOpenApiSpec() {
           },
         },
       },
-      '/api/admin/tokens/invalidate-all': {
-        post: {
+      '/api/admin/tokens/{tokenId}': {
+        patch: {
           tags: ['Admin'],
-          summary: 'Invalidate all admin tokens',
+          summary: 'Edit an access token',
           description:
-            'Revokes all active admin and superadmin tokens immediately. This endpoint is restricted to superadmin tokens.',
-          operationId: 'invalidateAllAdminTokens',
+            'Updates the alias and service flags for an existing access token. The underlying secret does not change.',
+          operationId: 'updateAccessToken',
           parameters: [
             {
               name: 'x-admin-token',
@@ -2218,18 +2346,41 @@ export function buildOpenApiSpec() {
               schema: { type: 'string' },
               description: 'Superadmin token minted via server-side CLI.',
             },
+            {
+              name: 'tokenId',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Access token id to update.',
+            },
           ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AccessTokenUpdateRequest' },
+              },
+            },
+          },
           responses: {
             200: {
-              description: 'Tokens invalidated successfully',
+              description: 'Access token updated successfully',
               content: {
                 'application/json': {
-                  schema: { $ref: '#/components/schemas/AdminTokenInvalidateAllSuccessResponse' },
+                  schema: { $ref: '#/components/schemas/AccessTokenRecordSuccessResponse' },
+                },
+              },
+            },
+            400: {
+              description: 'Invalid alias, token type, or service flags',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
                 },
               },
             },
             401: {
-              description: 'Missing admin token',
+              description: 'Missing superadmin token',
               content: {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/ErrorResponse' },
@@ -2238,6 +2389,294 @@ export function buildOpenApiSpec() {
             },
             403: {
               description: 'Invalid token or token role is not superadmin',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            404: {
+              description: 'Access token was not found',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            429: {
+              description: 'Mutating request rate limit exceeded for source IP',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            500: {
+              description: 'Unexpected server error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/admin/tokens/{tokenId}/revoke': {
+        post: {
+          tags: ['Admin'],
+          summary: 'Revoke an access token',
+          description: 'Revokes one access token by id. Revoked tokens can later be renewed.',
+          operationId: 'revokeAccessToken',
+          parameters: [
+            {
+              name: 'x-admin-token',
+              in: 'header',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Superadmin token minted via server-side CLI.',
+            },
+            {
+              name: 'tokenId',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Access token id to revoke.',
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Access token revoked successfully',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/AccessTokenRecordSuccessResponse' },
+                },
+              },
+            },
+            400: {
+              description: 'Token type cannot be revoked from the UI',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            401: {
+              description: 'Missing superadmin token',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            403: {
+              description: 'Invalid token or token role is not superadmin',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            404: {
+              description: 'Access token was not found',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            429: {
+              description: 'Mutating request rate limit exceeded for source IP',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            500: {
+              description: 'Unexpected server error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/admin/tokens/{tokenId}/renew': {
+        post: {
+          tags: ['Admin'],
+          summary: 'Renew a revoked or expired access token',
+          description:
+            'Generates a new plaintext secret for a revoked or expired access token and resets the token to active state.',
+          operationId: 'renewAccessToken',
+          parameters: [
+            {
+              name: 'x-admin-token',
+              in: 'header',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Superadmin token minted via server-side CLI.',
+            },
+            {
+              name: 'tokenId',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Access token id to renew.',
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AccessTokenTtlRequest' },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'Access token renewed successfully',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/AccessTokenSecretSuccessResponse' },
+                },
+              },
+            },
+            400: {
+              description: 'Invalid ttl or unsupported token type',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            401: {
+              description: 'Missing superadmin token',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            403: {
+              description: 'Invalid token or token role is not superadmin',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            404: {
+              description: 'Access token was not found',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            409: {
+              description: 'Token is still active and cannot be renewed yet',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            429: {
+              description: 'Mutating request rate limit exceeded for source IP',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            500: {
+              description: 'Unexpected server error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/admin/tokens/{tokenId}/extend': {
+        post: {
+          tags: ['Admin'],
+          summary: 'Extend an access token expiry',
+          description:
+            'Adds more lifetime to an active or expired access token without rotating the underlying secret. Revoked tokens must be renewed instead.',
+          operationId: 'extendAccessToken',
+          parameters: [
+            {
+              name: 'x-admin-token',
+              in: 'header',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Superadmin token minted via server-side CLI.',
+            },
+            {
+              name: 'tokenId',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Access token id to extend.',
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AccessTokenTtlRequest' },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'Access token extended successfully',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/AccessTokenRecordSuccessResponse' },
+                },
+              },
+            },
+            400: {
+              description: 'Invalid ttl or unsupported token type',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            401: {
+              description: 'Missing superadmin token',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            403: {
+              description: 'Invalid token or token role is not superadmin',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            404: {
+              description: 'Access token was not found',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            409: {
+              description: 'Revoked token cannot be extended',
               content: {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/ErrorResponse' },
@@ -2601,10 +3040,9 @@ export function buildOpenApiSpec() {
               type: 'array',
               items: { $ref: '#/components/schemas/AdminFailureReportListItem' },
             },
-            viewerRole: { type: 'string', enum: ['admin', 'superadmin'], example: 'admin' },
-            viewerOwnerId: { type: 'string', example: 'public' },
+            viewerRole: { type: 'string', enum: ['superadmin'], example: 'superadmin' },
           },
-          required: ['count', 'reports', 'viewerRole', 'viewerOwnerId'],
+          required: ['count', 'reports', 'viewerRole'],
         },
         AdminReportsListSuccessResponse: {
           type: 'object',
@@ -2634,12 +3072,58 @@ export function buildOpenApiSpec() {
           },
           required: ['success', 'message', 'data', 'meta'],
         },
-        AdminTokenInventoryItem: {
+        BooksGreekEditorAccessTokenPayload: {
           type: 'object',
           properties: {
             tokenId: { type: 'string', example: 'e41a494b-ca7b-4790-8f30-6fba24ed5685' },
-            role: { type: 'string', enum: ['admin', 'superadmin'], example: 'superadmin' },
-            ownerId: { type: 'string', example: 'global' },
+            alias: { type: 'string', example: 'Books editor client' },
+            serviceFlags: {
+              type: 'array',
+              items: {
+                type: 'string',
+                enum: ACCESS_TOKEN_SERVICE_FLAG_LIST,
+              },
+              example: ['books_greek_editor'],
+            },
+            expiresAt: { nullable: true, type: 'string', format: 'date-time' },
+          },
+          required: ['tokenId', 'alias', 'serviceFlags', 'expiresAt'],
+        },
+        BooksGreekEditorAccessPayload: {
+          type: 'object',
+          properties: {
+            authEnabled: { type: 'boolean', example: true },
+            token: {
+              nullable: true,
+              allOf: [{ $ref: '#/components/schemas/BooksGreekEditorAccessTokenPayload' }],
+            },
+          },
+          required: ['authEnabled', 'token'],
+        },
+        BooksGreekEditorAccessSuccessResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            message: { type: 'string', example: 'Greek editor token validated successfully' },
+            data: { $ref: '#/components/schemas/BooksGreekEditorAccessPayload' },
+            meta: { $ref: '#/components/schemas/ResponseMeta' },
+          },
+          required: ['success', 'message', 'data', 'meta'],
+        },
+        AccessTokenInventoryItem: {
+          type: 'object',
+          properties: {
+            tokenId: { type: 'string', example: 'e41a494b-ca7b-4790-8f30-6fba24ed5685' },
+            tokenType: { type: 'string', enum: ['access'], example: 'access' },
+            alias: { type: 'string', example: 'Books editor client' },
+            serviceFlags: {
+              type: 'array',
+              items: {
+                type: 'string',
+                enum: ACCESS_TOKEN_SERVICE_FLAG_LIST,
+              },
+              example: ['books_greek_editor'],
+            },
             createdAt: { nullable: true, type: 'string', format: 'date-time' },
             expiresAt: { nullable: true, type: 'string', format: 'date-time' },
             revokedAt: { nullable: true, type: 'string', format: 'date-time' },
@@ -2649,93 +3133,133 @@ export function buildOpenApiSpec() {
               example: 'superadmin_revoke_selected',
             },
             revokedByTokenId: { nullable: true, type: 'string' },
-            isCurrent: { type: 'boolean', example: true },
+            renewedAt: { nullable: true, type: 'string', format: 'date-time' },
+            renewedByTokenId: { nullable: true, type: 'string' },
+            extendedAt: { nullable: true, type: 'string', format: 'date-time' },
+            extendedByTokenId: { nullable: true, type: 'string' },
             isExpired: { type: 'boolean', example: false },
+            isRevoked: { type: 'boolean', example: false },
             isActive: { type: 'boolean', example: true },
           },
           required: [
             'tokenId',
-            'role',
-            'ownerId',
+            'tokenType',
+            'alias',
+            'serviceFlags',
             'createdAt',
             'expiresAt',
             'revokedAt',
             'revocationReason',
             'revokedByTokenId',
-            'isCurrent',
+            'renewedAt',
+            'renewedByTokenId',
+            'extendedAt',
+            'extendedByTokenId',
             'isExpired',
+            'isRevoked',
             'isActive',
           ],
         },
-        AdminTokensListPayload: {
+        AccessTokensListPayload: {
           type: 'object',
           properties: {
             count: { type: 'integer', minimum: 0, example: 4 },
             tokens: {
               type: 'array',
-              items: { $ref: '#/components/schemas/AdminTokenInventoryItem' },
+              items: { $ref: '#/components/schemas/AccessTokenInventoryItem' },
             },
-            currentTokenId: { nullable: true, type: 'string' },
+            availableServiceFlags: {
+              type: 'array',
+              items: {
+                type: 'string',
+                enum: ACCESS_TOKEN_SERVICE_FLAG_LIST,
+              },
+              example: ACCESS_TOKEN_SERVICE_FLAG_LIST,
+            },
           },
-          required: ['count', 'tokens', 'currentTokenId'],
+          required: ['count', 'tokens', 'availableServiceFlags'],
         },
-        AdminTokensListSuccessResponse: {
+        AccessTokensListSuccessResponse: {
           type: 'object',
           properties: {
             success: { type: 'boolean', example: true },
-            message: { type: 'string', example: 'Admin tokens fetched successfully' },
-            data: { $ref: '#/components/schemas/AdminTokensListPayload' },
+            message: { type: 'string', example: 'Access tokens fetched successfully' },
+            data: { $ref: '#/components/schemas/AccessTokensListPayload' },
             meta: { $ref: '#/components/schemas/ResponseMeta' },
           },
           required: ['success', 'message', 'data', 'meta'],
         },
-        AdminTokenRevokeRequest: {
+        AccessTokenCreateRequest: {
           type: 'object',
           properties: {
-            tokenIds: {
+            alias: { type: 'string', example: 'Books editor client' },
+            ttl: { type: 'string', example: '30d' },
+            serviceFlags: {
               type: 'array',
               minItems: 1,
-              items: { type: 'string', example: 'e41a494b-ca7b-4790-8f30-6fba24ed5685' },
+              items: {
+                type: 'string',
+                enum: ACCESS_TOKEN_SERVICE_FLAG_LIST,
+              },
+              example: ['books_greek_editor'],
             },
           },
-          required: ['tokenIds'],
+          required: ['alias', 'ttl', 'serviceFlags'],
         },
-        AdminTokenRevokePayload: {
+        AccessTokenUpdateRequest: {
           type: 'object',
           properties: {
-            requested: { type: 'integer', minimum: 1, example: 2 },
-            revoked: { type: 'integer', minimum: 0, example: 2 },
-            revokedAt: { type: 'string', format: 'date-time' },
-            revokedTokenIds: { type: 'array', items: { type: 'string' } },
-            revokedCurrentToken: { type: 'boolean', example: false },
+            alias: { type: 'string', example: 'Books editor client' },
+            serviceFlags: {
+              type: 'array',
+              minItems: 1,
+              items: {
+                type: 'string',
+                enum: ACCESS_TOKEN_SERVICE_FLAG_LIST,
+              },
+              example: ['books_greek_editor', 'pdf'],
+            },
           },
-          required: ['requested', 'revoked', 'revokedAt', 'revokedTokenIds', 'revokedCurrentToken'],
+          required: ['alias', 'serviceFlags'],
         },
-        AdminTokenRevokeSuccessResponse: {
+        AccessTokenTtlRequest: {
+          type: 'object',
+          properties: {
+            ttl: { type: 'string', example: '30d' },
+          },
+          required: ['ttl'],
+        },
+        AccessTokenSecretPayload: {
+          type: 'object',
+          properties: {
+            token: { type: 'string', example: 'sat_0123456789abcdef' },
+            record: { $ref: '#/components/schemas/AccessTokenInventoryItem' },
+          },
+          required: ['token', 'record'],
+        },
+        AccessTokenRecordPayload: {
+          type: 'object',
+          properties: {
+            record: { $ref: '#/components/schemas/AccessTokenInventoryItem' },
+          },
+          required: ['record'],
+        },
+        AccessTokenSecretSuccessResponse: {
           type: 'object',
           properties: {
             success: { type: 'boolean', example: true },
-            message: { type: 'string', example: 'Selected admin tokens revoked successfully' },
-            data: { $ref: '#/components/schemas/AdminTokenRevokePayload' },
+            message: { type: 'string', example: 'Access token created successfully' },
+            data: { $ref: '#/components/schemas/AccessTokenSecretPayload' },
             meta: { $ref: '#/components/schemas/ResponseMeta' },
           },
           required: ['success', 'message', 'data', 'meta'],
         },
-        AdminTokenInvalidateAllPayload: {
-          type: 'object',
-          properties: {
-            invalidated: { type: 'integer', minimum: 0, example: 3 },
-            revokedAt: { type: 'string', format: 'date-time' },
-            invalidatedByTokenId: { nullable: true, type: 'string' },
-          },
-          required: ['invalidated', 'revokedAt', 'invalidatedByTokenId'],
-        },
-        AdminTokenInvalidateAllSuccessResponse: {
+        AccessTokenRecordSuccessResponse: {
           type: 'object',
           properties: {
             success: { type: 'boolean', example: true },
-            message: { type: 'string', example: 'All admin tokens invalidated successfully' },
-            data: { $ref: '#/components/schemas/AdminTokenInvalidateAllPayload' },
+            message: { type: 'string', example: 'Access token updated successfully' },
+            data: { $ref: '#/components/schemas/AccessTokenRecordPayload' },
             meta: { $ref: '#/components/schemas/ResponseMeta' },
           },
           required: ['success', 'message', 'data', 'meta'],

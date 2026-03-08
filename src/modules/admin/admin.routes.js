@@ -1,17 +1,21 @@
 /*
- * Report endpoints enforce token-based scope controls and return a sanitized
- * diagnostics view that avoids exposing sensitive request context values.
+ * Admin routes now expose token management for superadmins and keep failure
+ * reports behind the same control-plane credential instead of access tokens.
  */
 import { Router } from 'express';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { ApiError } from '../../common/utils/api-error.js';
 import { sendSuccess } from '../../common/utils/api-response.js';
-import { requireAdminToken, requireSuperAdminToken } from './admin-auth.middleware.js';
+import { requireSuperAdminToken } from './admin-auth.middleware.js';
 import {
-  invalidateAllAdminTokens,
-  listAdminTokens,
-  revokeAdminTokens,
+  createAccessToken,
+  extendAccessToken,
+  listAccessTokens,
+  parseTokenTtl,
+  renewAccessToken,
+  revokeAccessToken,
+  updateAccessToken,
 } from './admin-token.service.js';
 
 const adminRouter = Router();
@@ -65,18 +69,15 @@ const toSafeObject = (value) => {
   return value;
 };
 
-const toSafeArray = (value) => {
-  return Array.isArray(value) ? value : [];
-};
+const toSafeArray = (value) => (Array.isArray(value) ? value : []);
 
-const sanitizeFailureDetails = (details) => {
-  return toSafeArray(details)
+const sanitizeFailureDetails = (details) =>
+  toSafeArray(details)
     .slice(0, 40)
     .map((item) => ({
       field: String(item?.field || 'unknown'),
       issue: String(item?.issue || 'Invalid input'),
     }));
-};
 
 const sanitizeReportForAdmin = (report, fileName) => {
   const operation = toSafeObject(report?.operation);
@@ -119,15 +120,15 @@ const sanitizeReportForAdmin = (report, fileName) => {
   };
 };
 
-const canAccessReport = (adminAuth, report) => {
-  if (adminAuth?.role === 'superadmin') {
-    return true;
-  }
-
-  return String(report?.ownerId || 'public') === String(adminAuth?.ownerId || 'public');
+const parseTokenPayload = (body) => {
+  return {
+    alias: body?.alias,
+    serviceFlags: body?.serviceFlags,
+    ttlSeconds: parseTokenTtl(body?.ttl || '30d'),
+  };
 };
 
-adminRouter.use(requireAdminToken);
+adminRouter.use(requireSuperAdminToken);
 
 adminRouter.get('/reports', (req, res, next) => {
   try {
@@ -137,6 +138,7 @@ adminRouter.get('/reports', (req, res, next) => {
         data: {
           count: 0,
           reports: [],
+          viewerRole: 'superadmin',
         },
       });
       return;
@@ -148,18 +150,12 @@ adminRouter.get('/reports', (req, res, next) => {
       .sort((a, b) => b.localeCompare(a))
       .slice(0, 1200);
 
-    const reports = [];
-
-    for (const fileName of files) {
+    const reports = files.slice(0, limit).map((fileName) => {
       const filePath = resolve(failureLogsDir, fileName);
       const report = parseReportFile(filePath);
-
-      if (!canAccessReport(req.adminAuth, report)) {
-        continue;
-      }
-
       const sanitized = sanitizeReportForAdmin(report, fileName);
-      reports.push({
+
+      return {
         fileName: sanitized.fileName,
         reportType: sanitized.reportType,
         ownerId: sanitized.ownerId,
@@ -172,20 +168,15 @@ adminRouter.get('/reports', (req, res, next) => {
         method: sanitized.operation.method,
         path: sanitized.operation.path,
         intentTask: sanitized.operation.intentTask,
-      });
-
-      if (reports.length >= limit) {
-        break;
-      }
-    }
+      };
+    });
 
     sendSuccess(res, req, {
       message: 'Failure reports fetched successfully',
       data: {
         count: reports.length,
         reports,
-        viewerRole: req.adminAuth?.role || 'admin',
-        viewerOwnerId: req.adminAuth?.ownerId || 'public',
+        viewerRole: 'superadmin',
       },
     });
   } catch (error) {
@@ -204,19 +195,12 @@ adminRouter.get('/reports/:fileName', (req, res, next) => {
     }
 
     const report = parseReportFile(filePath);
-    if (!canAccessReport(req.adminAuth, report)) {
-      throw new ApiError(403, 'ADMIN_FORBIDDEN', 'Report is outside your token scope', {
-        details: [{ field: 'ownerId', issue: 'Token owner does not match report owner scope' }],
-      });
-    }
-
-    const sanitized = sanitizeReportForAdmin(report, normalized);
 
     sendSuccess(res, req, {
       message: 'Failure report fetched successfully',
       data: {
         fileName: normalized,
-        report: sanitized,
+        report: sanitizeReportForAdmin(report, normalized),
       },
     });
   } catch (error) {
@@ -224,14 +208,28 @@ adminRouter.get('/reports/:fileName', (req, res, next) => {
   }
 });
 
-adminRouter.get('/tokens', requireSuperAdminToken, (req, res, next) => {
+adminRouter.get('/tokens', (req, res, next) => {
   try {
-    const result = listAdminTokens({
+    sendSuccess(res, req, {
+      message: 'Access tokens fetched successfully',
+      data: listAccessTokens(),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post('/tokens', (req, res, next) => {
+  try {
+    const payload = parseTokenPayload(req.body);
+    const result = createAccessToken({
+      ...payload,
       actorTokenId: req.adminAuth?.tokenId || null,
     });
 
     sendSuccess(res, req, {
-      message: 'Admin tokens fetched successfully',
+      statusCode: 201,
+      message: 'Access token created successfully',
       data: result,
     });
   } catch (error) {
@@ -239,20 +237,50 @@ adminRouter.get('/tokens', requireSuperAdminToken, (req, res, next) => {
   }
 });
 
-/*
- * Bulk token revocation keeps superadmin session control granular so one or
- * many compromised admin sessions can be removed without a full reset.
- */
-adminRouter.post('/tokens/revoke', requireSuperAdminToken, (req, res, next) => {
+adminRouter.patch('/tokens/:tokenId', (req, res, next) => {
   try {
-    const result = revokeAdminTokens({
-      tokenIds: req.body?.tokenIds,
-      reason: 'superadmin_revoke_selected',
+    const record = updateAccessToken({
+      tokenId: req.params.tokenId,
+      alias: req.body?.alias,
+      serviceFlags: req.body?.serviceFlags,
+    });
+
+    sendSuccess(res, req, {
+      message: 'Access token updated successfully',
+      data: { record },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post('/tokens/:tokenId/revoke', (req, res, next) => {
+  try {
+    const record = revokeAccessToken({
+      tokenId: req.params.tokenId,
       actorTokenId: req.adminAuth?.tokenId || null,
     });
 
     sendSuccess(res, req, {
-      message: 'Selected admin tokens revoked successfully',
+      message: 'Access token revoked successfully',
+      data: { record },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post('/tokens/:tokenId/renew', (req, res, next) => {
+  try {
+    const ttlSeconds = parseTokenTtl(req.body?.ttl || '30d');
+    const result = renewAccessToken({
+      tokenId: req.params.tokenId,
+      ttlSeconds,
+      actorTokenId: req.adminAuth?.tokenId || null,
+    });
+
+    sendSuccess(res, req, {
+      message: 'Access token renewed successfully',
       data: result,
     });
   } catch (error) {
@@ -260,20 +288,18 @@ adminRouter.post('/tokens/revoke', requireSuperAdminToken, (req, res, next) => {
   }
 });
 
-adminRouter.post('/tokens/invalidate-all', requireSuperAdminToken, (req, res, next) => {
+adminRouter.post('/tokens/:tokenId/extend', (req, res, next) => {
   try {
-    const result = invalidateAllAdminTokens({
-      reason: 'superadmin_invalidate_all',
+    const ttlSeconds = parseTokenTtl(req.body?.ttl || '30d');
+    const record = extendAccessToken({
+      tokenId: req.params.tokenId,
+      ttlSeconds,
       actorTokenId: req.adminAuth?.tokenId || null,
     });
 
     sendSuccess(res, req, {
-      message: 'All admin tokens invalidated successfully',
-      data: {
-        invalidated: result.invalidated,
-        revokedAt: result.revokedAt,
-        invalidatedByTokenId: req.adminAuth?.tokenId || null,
-      },
+      message: 'Access token extended successfully',
+      data: { record },
     });
   } catch (error) {
     next(error);

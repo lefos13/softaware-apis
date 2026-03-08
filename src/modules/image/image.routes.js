@@ -1,4 +1,5 @@
 import { initializeTaskProgress } from '../../common/middleware/task-context.js';
+import { requireTrustedClient } from '../../common/middleware/trusted-client.middleware.js';
 import { Router } from 'express';
 import {
   compressImagesController,
@@ -8,6 +9,8 @@ import {
 import { imageUpload } from './image.upload.js';
 
 const imageRouter = Router();
+
+imageRouter.use(requireTrustedClient);
 
 imageRouter.post(
   '/compress',

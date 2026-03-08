@@ -1,19 +1,17 @@
 /*
- * Token minting stays server-side so admin credentials can be created with
- * role/owner/expiry controls without exposing creation through public APIs.
+ * Superadmin bootstrap tokens stay CLI-only so the browser can manage access
+ * tokens without ever gaining the ability to mint control-plane credentials.
  */
-import { createAdminToken, parseTokenTtl } from '../modules/admin/admin-token.service.js';
+import { createSuperAdminToken, parseTokenTtl } from '../modules/admin/admin-token.service.js';
 
 const usageText = `
-[softaware-apis] Admin token creation
+[softaware-apis] Superadmin token creation
 
 Usage:
-  npm run admin:token:create -- --role=admin --owner-id=public --ttl=30d
-  npm run admin:token:create -- --role=superadmin --owner-id=global --ttl=30d
+  npm run admin:token:create -- --alias="Primary superadmin" --ttl=30d
 
 Options:
-  --role=admin|superadmin
-  --owner-id=<scope owner id>
+  --alias=<friendly label for the superadmin token>
   --ttl=<duration such as 30m, 24h, 30d>
 `.trim();
 
@@ -38,25 +36,23 @@ if (args.help !== undefined) {
   process.exit(0);
 }
 
-const role = String(args.role || 'admin')
-  .trim()
-  .toLowerCase();
-const ownerId = String(args['owner-id'] || 'public').trim();
+const alias = String(args.alias || 'CLI superadmin').trim();
 const ttlRaw = String(args.ttl || '30d').trim();
 
 try {
   const ttlSeconds = parseTokenTtl(ttlRaw);
-  const created = createAdminToken({
-    role,
-    ownerId,
+  const created = createSuperAdminToken({
+    alias,
     ttlSeconds,
   });
 
-  console.log('[softaware-apis] Admin token created. Store this token securely; it is shown once.');
+  console.log(
+    '[softaware-apis] Superadmin token created. Store this token securely; it is shown once.',
+  );
   console.log('');
   console.log(`token=${created.token}`);
-  console.log(`role=${created.role}`);
-  console.log(`ownerId=${created.ownerId}`);
+  console.log(`tokenType=${created.tokenType}`);
+  console.log(`alias=${created.alias}`);
   console.log(`tokenId=${created.tokenId}`);
   console.log(`expiresAt=${created.expiresAt}`);
 } catch (error) {

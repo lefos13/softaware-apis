@@ -89,6 +89,22 @@ const ensureFeatureEnabled = () => {
   }
 };
 
+/*
+ * The access handshake returns one small authenticated payload so the browser
+ * can restore or reject a persisted editor token before exposing the editor UI.
+ */
+const buildEditorAccessPayload = (req) => ({
+  authEnabled: env.booksEditorTokenAuthEnabled,
+  token: req.serviceAuth
+    ? {
+        tokenId: req.serviceAuth.tokenId,
+        alias: req.serviceAuth.alias,
+        serviceFlags: req.serviceAuth.serviceFlags,
+        expiresAt: req.serviceAuth.expiresAt,
+      }
+    : null,
+});
+
 const parseTextPayload = (body) => {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw new ApiError(400, 'INVALID_INPUT', 'Request body must be a JSON object', {
@@ -101,6 +117,21 @@ const parseTextPayload = (body) => {
     editorOptions: parseEditorOptions(body.editorOptions),
   };
 };
+
+export async function validateGreekEditorAccessController(req, res, next) {
+  try {
+    ensureFeatureEnabled();
+
+    sendSuccess(res, req, {
+      message: env.booksEditorTokenAuthEnabled
+        ? 'Greek editor token validated successfully'
+        : 'Greek editor token validation is disabled for this environment',
+      data: buildEditorAccessPayload(req),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
 
 export async function applyGreekEditorController(req, res, next) {
   const taskId = req.taskId;

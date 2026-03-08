@@ -10,6 +10,7 @@ import {
   applyGreekEditorController,
   applyGreekEditorTextController,
   previewGreekEditorReportController,
+  validateGreekEditorAccessController,
 } from './books.controller.js';
 
 const createDocxBuffer = async (text = 'και αγάπη') => {
@@ -88,6 +89,35 @@ const createRequestMock = async (
     },
   ],
   get: () => '',
+});
+
+test('validateGreekEditorAccessController returns token metadata for validated sessions', async () => {
+  const req = {
+    get: () => '',
+    serviceAuth: {
+      tokenId: 'access-token-1',
+      alias: 'Books editor token',
+      serviceFlags: ['books_greek_editor'],
+      expiresAt: '2026-04-01T00:00:00.000Z',
+    },
+  };
+  const res = createResponseMock();
+  let forwardedError = null;
+
+  await validateGreekEditorAccessController(req, res, (error) => {
+    forwardedError = error;
+  });
+
+  assert.equal(forwardedError, null);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.success, true);
+  assert.equal(res.body.data.authEnabled, true);
+  assert.deepEqual(res.body.data.token, {
+    tokenId: 'access-token-1',
+    alias: 'Books editor token',
+    serviceFlags: ['books_greek_editor'],
+    expiresAt: '2026-04-01T00:00:00.000Z',
+  });
 });
 
 test('applyGreekEditorController returns a DOCX download with task metadata', async () => {

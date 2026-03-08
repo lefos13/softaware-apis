@@ -164,6 +164,26 @@
               }
             }
           },
+          "401": {
+            "description": "Missing service token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service token is invalid, expired, revoked, or missing the books_greek_editor flag",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "413": {
             "description": "Upload exceeds per-file or total-size constraints",
             "content": {
@@ -645,13 +665,86 @@
         }
       }
     },
+    "/api/books/greek-editor/access": {
+      "get": {
+        "tags": [
+          "Books"
+        ],
+        "summary": "Validate editor token access for the Books Greek editor",
+        "description": "Validates the `x-service-token` used by the Books Greek editor login step and returns the token metadata needed to restore a browser session. In non-production environments this route can be bypassed by setting `BOOKS_EDITOR_TOKEN_AUTH_ENABLED=false`; production always enforces token validation.",
+        "operationId": "validateGreekEditorAccess",
+        "parameters": [
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Access token created by a superadmin. Required in production and whenever the non-production editor auth flag remains enabled. The token must include the `books_greek_editor` service flag."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Editor access is available for the current browser session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BooksGreekEditorAccessSuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing service token while editor auth is enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service token is invalid, expired, revoked, or missing the books_greek_editor flag",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Books Greek editor feature is disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/books/greek-editor/apply": {
       "post": {
         "tags": [
           "Books"
         ],
         "summary": "Apply Greek literature editing rules to one Word (.docx) manuscript",
-        "description": "Upload exactly one DOCX in `files` plus required `editorOptions` JSON. The service edits only the main body text of `word/document.xml`, applies the selected rules in fixed server order, and returns one corrected DOCX. If `editorOptions.includeReport=true`, the response is a ZIP package containing the corrected DOCX plus text and JSON change reports. Limits: 20 files, 25 MB each, 120 MB total.",
+        "description": "Upload exactly one DOCX in `files` plus required `editorOptions` JSON. The service edits only the main body text of `word/document.xml`, applies the selected rules in fixed server order, and returns one corrected DOCX. If `editorOptions.includeReport=true`, the response is a ZIP package containing the corrected DOCX plus text and JSON change reports. Production requires `x-service-token` with the `books_greek_editor` service flag; non-production can bypass it only when `BOOKS_EDITOR_TOKEN_AUTH_ENABLED=false`. Limits: 20 files, 25 MB each, 120 MB total.",
         "operationId": "applyGreekEditorRules",
         "parameters": [
           {
@@ -662,6 +755,15 @@
               "type": "string"
             },
             "description": "Optional client-provided task id used for progress polling. If omitted, backend generates one."
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Access token created by a superadmin. Required in production and whenever the non-production editor auth flag remains enabled. The token must include the `books_greek_editor` service flag."
           }
         ],
         "requestBody": {
@@ -744,6 +846,26 @@
               }
             }
           },
+          "401": {
+            "description": "Missing service token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service token is invalid, expired, revoked, or missing the books_greek_editor flag",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "413": {
             "description": "Upload exceeds per-file or total-size constraints",
             "content": {
@@ -803,7 +925,7 @@
           "Books"
         ],
         "summary": "Apply Greek literature editing rules to pasted text",
-        "description": "Send JSON with `inputText` and `editorOptions`. The service applies the selected rules in fixed server order and returns corrected text, summary counts, and optional detailed report content.",
+        "description": "Send JSON with `inputText` and `editorOptions`. The service applies the selected rules in fixed server order and returns corrected text, summary counts, and optional detailed report content. Production requires `x-service-token` with the `books_greek_editor` service flag; non-production can bypass it only when `BOOKS_EDITOR_TOKEN_AUTH_ENABLED=false`.",
         "operationId": "applyGreekEditorRulesToText",
         "parameters": [
           {
@@ -814,6 +936,15 @@
               "type": "string"
             },
             "description": "Optional client-provided task id used for progress polling. If omitted, backend generates one."
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Access token created by a superadmin. Required in production and whenever the non-production editor auth flag remains enabled. The token must include the `books_greek_editor` service flag."
           }
         ],
         "requestBody": {
@@ -989,6 +1120,26 @@
               }
             }
           },
+          "401": {
+            "description": "Missing service token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Service token is invalid, expired, revoked, or missing the books_greek_editor flag",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Feature disabled",
             "content": {
@@ -1028,7 +1179,7 @@
           "Books"
         ],
         "summary": "Generate a JSON report preview for one Word (.docx) manuscript",
-        "description": "Upload exactly one DOCX in `files` plus `editorOptions` JSON and receive a JSON preview of the report that would accompany the corrected manuscript package.",
+        "description": "Upload exactly one DOCX in `files` plus `editorOptions` JSON and receive a JSON preview of the report that would accompany the corrected manuscript package. Production requires `x-service-token` with the `books_greek_editor` service flag; non-production can bypass it only when `BOOKS_EDITOR_TOKEN_AUTH_ENABLED=false`.",
         "operationId": "previewGreekEditorReport",
         "parameters": [
           {
@@ -1039,6 +1190,15 @@
               "type": "string"
             },
             "description": "Optional client-provided task id used for progress polling. If omitted, backend generates one."
+          },
+          {
+            "name": "x-service-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Access token created by a superadmin. Required in production and whenever the non-production editor auth flag remains enabled. The token must include the `books_greek_editor` service flag."
           }
         ],
         "requestBody": {
@@ -2532,7 +2692,7 @@
           "Admin"
         ],
         "summary": "List API failure reports",
-        "description": "Lists most recent request-failure reports generated by backend error logging middleware. Non-superadmin tokens only receive reports in their owner scope.",
+        "description": "Lists most recent request-failure reports generated by backend error logging middleware. This endpoint is restricted to superadmin tokens.",
         "operationId": "listFailureReports",
         "parameters": [
           {
@@ -2542,7 +2702,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Admin or superadmin token minted via server-side CLI."
+            "description": "Superadmin token minted via server-side CLI."
           },
           {
             "name": "limit",
@@ -2617,7 +2777,7 @@
           "Admin"
         ],
         "summary": "Get full sanitized API failure report details",
-        "description": "Fetches one sanitized report payload by file name from logs/failures, scoped by admin token owner unless token role is superadmin.",
+        "description": "Fetches one sanitized report payload by file name from logs/failures. This endpoint is restricted to superadmin tokens.",
         "operationId": "getFailureReportByFileName",
         "parameters": [
           {
@@ -2627,7 +2787,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Admin or superadmin token minted via server-side CLI."
+            "description": "Superadmin token minted via server-side CLI."
           },
           {
             "name": "fileName",
@@ -2671,7 +2831,7 @@
             }
           },
           "403": {
-            "description": "Invalid token or report outside owner scope",
+            "description": "Invalid token or token role is not superadmin",
             "content": {
               "application/json": {
                 "schema": {
@@ -2708,9 +2868,9 @@
         "tags": [
           "Admin"
         ],
-        "summary": "List admin tokens",
-        "description": "Lists admin and superadmin token metadata for superadmin session management. Plaintext tokens and stored hashes are never returned.",
-        "operationId": "listAdminTokens",
+        "summary": "List access tokens",
+        "description": "Lists access-token metadata for the superadmin management screen. Plaintext tokens and stored hashes are never returned.",
+        "operationId": "listAccessTokens",
         "parameters": [
           {
             "name": "x-admin-token",
@@ -2724,17 +2884,17 @@
         ],
         "responses": {
           "200": {
-            "description": "Admin token inventory",
+            "description": "Access token inventory",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AdminTokensListSuccessResponse"
+                  "$ref": "#/components/schemas/AccessTokensListSuccessResponse"
                 }
               }
             }
           },
           "401": {
-            "description": "Missing admin token",
+            "description": "Missing superadmin token",
             "content": {
               "application/json": {
                 "schema": {
@@ -2764,16 +2924,14 @@
             }
           }
         }
-      }
-    },
-    "/api/admin/tokens/revoke": {
+      },
       "post": {
         "tags": [
           "Admin"
         ],
-        "summary": "Revoke selected admin tokens",
-        "description": "Revokes one or many admin or superadmin tokens by token id. This endpoint is restricted to superadmin tokens.",
-        "operationId": "revokeAdminTokens",
+        "summary": "Create an access token",
+        "description": "Creates a new access token with a user-defined alias, TTL, and one or more service flags. Superadmin tokens cannot be created from the UI.",
+        "operationId": "createAccessToken",
         "parameters": [
           {
             "name": "x-admin-token",
@@ -2790,24 +2948,24 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AdminTokenRevokeRequest"
+                "$ref": "#/components/schemas/AccessTokenCreateRequest"
               }
             }
           }
         },
         "responses": {
-          "200": {
-            "description": "Selected tokens revoked successfully",
+          "201": {
+            "description": "Access token created successfully",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AdminTokenRevokeSuccessResponse"
+                  "$ref": "#/components/schemas/AccessTokenSecretSuccessResponse"
                 }
               }
             }
           },
           "400": {
-            "description": "Missing or invalid tokenIds payload",
+            "description": "Invalid alias, ttl, or serviceFlags payload",
             "content": {
               "application/json": {
                 "schema": {
@@ -2817,7 +2975,7 @@
             }
           },
           "401": {
-            "description": "Missing admin token",
+            "description": "Missing superadmin token",
             "content": {
               "application/json": {
                 "schema": {
@@ -2869,14 +3027,14 @@
         }
       }
     },
-    "/api/admin/tokens/invalidate-all": {
-      "post": {
+    "/api/admin/tokens/{tokenId}": {
+      "patch": {
         "tags": [
           "Admin"
         ],
-        "summary": "Invalidate all admin tokens",
-        "description": "Revokes all active admin and superadmin tokens immediately. This endpoint is restricted to superadmin tokens.",
-        "operationId": "invalidateAllAdminTokens",
+        "summary": "Edit an access token",
+        "description": "Updates the alias and service flags for an existing access token. The underlying secret does not change.",
+        "operationId": "updateAccessToken",
         "parameters": [
           {
             "name": "x-admin-token",
@@ -2886,21 +3044,50 @@
               "type": "string"
             },
             "description": "Superadmin token minted via server-side CLI."
+          },
+          {
+            "name": "tokenId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Access token id to update."
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessTokenUpdateRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "Tokens invalidated successfully",
+            "description": "Access token updated successfully",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AdminTokenInvalidateAllSuccessResponse"
+                  "$ref": "#/components/schemas/AccessTokenRecordSuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid alias, token type, or service flags",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
           },
           "401": {
-            "description": "Missing admin token",
+            "description": "Missing superadmin token",
             "content": {
               "application/json": {
                 "schema": {
@@ -2911,6 +3098,362 @@
           },
           "403": {
             "description": "Invalid token or token role is not superadmin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Access token was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Mutating request rate limit exceeded for source IP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/tokens/{tokenId}/revoke": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Revoke an access token",
+        "description": "Revokes one access token by id. Revoked tokens can later be renewed.",
+        "operationId": "revokeAccessToken",
+        "parameters": [
+          {
+            "name": "x-admin-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Superadmin token minted via server-side CLI."
+          },
+          {
+            "name": "tokenId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Access token id to revoke."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Access token revoked successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessTokenRecordSuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token type cannot be revoked from the UI",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing superadmin token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Invalid token or token role is not superadmin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Access token was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Mutating request rate limit exceeded for source IP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/tokens/{tokenId}/renew": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Renew a revoked or expired access token",
+        "description": "Generates a new plaintext secret for a revoked or expired access token and resets the token to active state.",
+        "operationId": "renewAccessToken",
+        "parameters": [
+          {
+            "name": "x-admin-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Superadmin token minted via server-side CLI."
+          },
+          {
+            "name": "tokenId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Access token id to renew."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessTokenTtlRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access token renewed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessTokenSecretSuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ttl or unsupported token type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing superadmin token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Invalid token or token role is not superadmin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Access token was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Token is still active and cannot be renewed yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Mutating request rate limit exceeded for source IP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/tokens/{tokenId}/extend": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Extend an access token expiry",
+        "description": "Adds more lifetime to an active or expired access token without rotating the underlying secret. Revoked tokens must be renewed instead.",
+        "operationId": "extendAccessToken",
+        "parameters": [
+          {
+            "name": "x-admin-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Superadmin token minted via server-side CLI."
+          },
+          {
+            "name": "tokenId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Access token id to extend."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessTokenTtlRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access token extended successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessTokenRecordSuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ttl or unsupported token type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing superadmin token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Invalid token or token role is not superadmin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Access token was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Revoked token cannot be extended",
             "content": {
               "application/json": {
                 "schema": {
@@ -3713,21 +4256,15 @@
           "viewerRole": {
             "type": "string",
             "enum": [
-              "admin",
               "superadmin"
             ],
-            "example": "admin"
-          },
-          "viewerOwnerId": {
-            "type": "string",
-            "example": "public"
+            "example": "superadmin"
           }
         },
         "required": [
           "count",
           "reports",
-          "viewerRole",
-          "viewerOwnerId"
+          "viewerRole"
         ]
       },
       "AdminReportsListSuccessResponse": {
@@ -3795,24 +4332,123 @@
           "meta"
         ]
       },
-      "AdminTokenInventoryItem": {
+      "BooksGreekEditorAccessTokenPayload": {
         "type": "object",
         "properties": {
           "tokenId": {
             "type": "string",
             "example": "e41a494b-ca7b-4790-8f30-6fba24ed5685"
           },
-          "role": {
+          "alias": {
+            "type": "string",
+            "example": "Books editor client"
+          },
+          "serviceFlags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "books_greek_editor",
+                "pdf",
+                "image",
+                "tasks"
+              ]
+            },
+            "example": [
+              "books_greek_editor"
+            ]
+          },
+          "expiresAt": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "tokenId",
+          "alias",
+          "serviceFlags",
+          "expiresAt"
+        ]
+      },
+      "BooksGreekEditorAccessPayload": {
+        "type": "object",
+        "properties": {
+          "authEnabled": {
+            "type": "boolean",
+            "example": true
+          },
+          "token": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BooksGreekEditorAccessTokenPayload"
+              }
+            ]
+          }
+        },
+        "required": [
+          "authEnabled",
+          "token"
+        ]
+      },
+      "BooksGreekEditorAccessSuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string",
+            "example": "Greek editor token validated successfully"
+          },
+          "data": {
+            "$ref": "#/components/schemas/BooksGreekEditorAccessPayload"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "data",
+          "meta"
+        ]
+      },
+      "AccessTokenInventoryItem": {
+        "type": "object",
+        "properties": {
+          "tokenId": {
+            "type": "string",
+            "example": "e41a494b-ca7b-4790-8f30-6fba24ed5685"
+          },
+          "tokenType": {
             "type": "string",
             "enum": [
-              "admin",
-              "superadmin"
+              "access"
             ],
-            "example": "superadmin"
+            "example": "access"
           },
-          "ownerId": {
+          "alias": {
             "type": "string",
-            "example": "global"
+            "example": "Books editor client"
+          },
+          "serviceFlags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "books_greek_editor",
+                "pdf",
+                "image",
+                "tasks"
+              ]
+            },
+            "example": [
+              "books_greek_editor"
+            ]
           },
           "createdAt": {
             "nullable": true,
@@ -3838,11 +4474,29 @@
             "nullable": true,
             "type": "string"
           },
-          "isCurrent": {
-            "type": "boolean",
-            "example": true
+          "renewedAt": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          },
+          "renewedByTokenId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "extendedAt": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          },
+          "extendedByTokenId": {
+            "nullable": true,
+            "type": "string"
           },
           "isExpired": {
+            "type": "boolean",
+            "example": false
+          },
+          "isRevoked": {
             "type": "boolean",
             "example": false
           },
@@ -3853,19 +4507,24 @@
         },
         "required": [
           "tokenId",
-          "role",
-          "ownerId",
+          "tokenType",
+          "alias",
+          "serviceFlags",
           "createdAt",
           "expiresAt",
           "revokedAt",
           "revocationReason",
           "revokedByTokenId",
-          "isCurrent",
+          "renewedAt",
+          "renewedByTokenId",
+          "extendedAt",
+          "extendedByTokenId",
           "isExpired",
+          "isRevoked",
           "isActive"
         ]
       },
-      "AdminTokensListPayload": {
+      "AccessTokensListPayload": {
         "type": "object",
         "properties": {
           "count": {
@@ -3876,21 +4535,35 @@
           "tokens": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AdminTokenInventoryItem"
+              "$ref": "#/components/schemas/AccessTokenInventoryItem"
             }
           },
-          "currentTokenId": {
-            "nullable": true,
-            "type": "string"
+          "availableServiceFlags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "books_greek_editor",
+                "pdf",
+                "image",
+                "tasks"
+              ]
+            },
+            "example": [
+              "books_greek_editor",
+              "pdf",
+              "image",
+              "tasks"
+            ]
           }
         },
         "required": [
           "count",
           "tokens",
-          "currentTokenId"
+          "availableServiceFlags"
         ]
       },
-      "AdminTokensListSuccessResponse": {
+      "AccessTokensListSuccessResponse": {
         "type": "object",
         "properties": {
           "success": {
@@ -3899,10 +4572,10 @@
           },
           "message": {
             "type": "string",
-            "example": "Admin tokens fetched successfully"
+            "example": "Access tokens fetched successfully"
           },
           "data": {
-            "$ref": "#/components/schemas/AdminTokensListPayload"
+            "$ref": "#/components/schemas/AccessTokensListPayload"
           },
           "meta": {
             "$ref": "#/components/schemas/ResponseMeta"
@@ -3915,59 +4588,110 @@
           "meta"
         ]
       },
-      "AdminTokenRevokeRequest": {
+      "AccessTokenCreateRequest": {
         "type": "object",
         "properties": {
-          "tokenIds": {
+          "alias": {
+            "type": "string",
+            "example": "Books editor client"
+          },
+          "ttl": {
+            "type": "string",
+            "example": "30d"
+          },
+          "serviceFlags": {
             "type": "array",
             "minItems": 1,
             "items": {
               "type": "string",
-              "example": "e41a494b-ca7b-4790-8f30-6fba24ed5685"
-            }
+              "enum": [
+                "books_greek_editor",
+                "pdf",
+                "image",
+                "tasks"
+              ]
+            },
+            "example": [
+              "books_greek_editor"
+            ]
           }
         },
         "required": [
-          "tokenIds"
+          "alias",
+          "ttl",
+          "serviceFlags"
         ]
       },
-      "AdminTokenRevokePayload": {
+      "AccessTokenUpdateRequest": {
         "type": "object",
         "properties": {
-          "requested": {
-            "type": "integer",
-            "minimum": 1,
-            "example": 2
-          },
-          "revoked": {
-            "type": "integer",
-            "minimum": 0,
-            "example": 2
-          },
-          "revokedAt": {
+          "alias": {
             "type": "string",
-            "format": "date-time"
+            "example": "Books editor client"
           },
-          "revokedTokenIds": {
+          "serviceFlags": {
             "type": "array",
+            "minItems": 1,
             "items": {
-              "type": "string"
-            }
-          },
-          "revokedCurrentToken": {
-            "type": "boolean",
-            "example": false
+              "type": "string",
+              "enum": [
+                "books_greek_editor",
+                "pdf",
+                "image",
+                "tasks"
+              ]
+            },
+            "example": [
+              "books_greek_editor",
+              "pdf"
+            ]
           }
         },
         "required": [
-          "requested",
-          "revoked",
-          "revokedAt",
-          "revokedTokenIds",
-          "revokedCurrentToken"
+          "alias",
+          "serviceFlags"
         ]
       },
-      "AdminTokenRevokeSuccessResponse": {
+      "AccessTokenTtlRequest": {
+        "type": "object",
+        "properties": {
+          "ttl": {
+            "type": "string",
+            "example": "30d"
+          }
+        },
+        "required": [
+          "ttl"
+        ]
+      },
+      "AccessTokenSecretPayload": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "example": "sat_0123456789abcdef"
+          },
+          "record": {
+            "$ref": "#/components/schemas/AccessTokenInventoryItem"
+          }
+        },
+        "required": [
+          "token",
+          "record"
+        ]
+      },
+      "AccessTokenRecordPayload": {
+        "type": "object",
+        "properties": {
+          "record": {
+            "$ref": "#/components/schemas/AccessTokenInventoryItem"
+          }
+        },
+        "required": [
+          "record"
+        ]
+      },
+      "AccessTokenSecretSuccessResponse": {
         "type": "object",
         "properties": {
           "success": {
@@ -3976,10 +4700,10 @@
           },
           "message": {
             "type": "string",
-            "example": "Selected admin tokens revoked successfully"
+            "example": "Access token created successfully"
           },
           "data": {
-            "$ref": "#/components/schemas/AdminTokenRevokePayload"
+            "$ref": "#/components/schemas/AccessTokenSecretPayload"
           },
           "meta": {
             "$ref": "#/components/schemas/ResponseMeta"
@@ -3992,30 +4716,7 @@
           "meta"
         ]
       },
-      "AdminTokenInvalidateAllPayload": {
-        "type": "object",
-        "properties": {
-          "invalidated": {
-            "type": "integer",
-            "minimum": 0,
-            "example": 3
-          },
-          "revokedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "invalidatedByTokenId": {
-            "nullable": true,
-            "type": "string"
-          }
-        },
-        "required": [
-          "invalidated",
-          "revokedAt",
-          "invalidatedByTokenId"
-        ]
-      },
-      "AdminTokenInvalidateAllSuccessResponse": {
+      "AccessTokenRecordSuccessResponse": {
         "type": "object",
         "properties": {
           "success": {
@@ -4024,10 +4725,10 @@
           },
           "message": {
             "type": "string",
-            "example": "All admin tokens invalidated successfully"
+            "example": "Access token updated successfully"
           },
           "data": {
-            "$ref": "#/components/schemas/AdminTokenInvalidateAllPayload"
+            "$ref": "#/components/schemas/AccessTokenRecordPayload"
           },
           "meta": {
             "$ref": "#/components/schemas/ResponseMeta"

@@ -8,7 +8,7 @@
     "runtime:check": "node src/scripts/ensure-ocr-runtime.js",
     "runtime:install": "node src/scripts/ensure-ocr-runtime.js --install",
     "admin:token:create": "node src/scripts/admin-token.js",
-    "admin:token:create:superadmin": "node src/scripts/admin-token.js --role=superadmin --owner-id=global --ttl=30d",
+    "admin:token:create:superadmin": "node src/scripts/admin-token.js --alias=\"CLI superadmin\" --ttl=30d",
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "check": "node --check src/server.js",

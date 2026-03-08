@@ -6,8 +6,11 @@ import { Router } from 'express';
 import { ApiError } from '../../common/utils/api-error.js';
 import { sendSuccess } from '../../common/utils/api-response.js';
 import { getTaskProgress } from '../../common/services/task-progress-store.js';
+import { requireTrustedClient } from '../../common/middleware/trusted-client.middleware.js';
 
 const tasksRouter = Router();
+
+tasksRouter.use(requireTrustedClient);
 
 tasksRouter.get('/:taskId', (req, res, next) => {
   try {

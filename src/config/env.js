@@ -29,6 +29,12 @@ const asBool = (value, fallback) => {
   return fallback;
 };
 
+const asList = (value) =>
+  String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
 const port = asInt(process.env.PORT, 3000);
 
 export const env = {
@@ -41,6 +47,10 @@ export const env = {
   maxTotalUploadBytes: asInt(process.env.MAX_TOTAL_UPLOAD_MB, 120) * 1024 * 1024,
   pdfExtractToDocxEnabled: asBool(process.env.PDF_EXTRACT_TO_DOCX_ENABLED, true),
   booksGreekEditorEnabled: asBool(process.env.BOOKS_GREEK_EDITOR_ENABLED, true),
+  booksEditorTokenAuthEnabled:
+    (process.env.NODE_ENV || 'development') === 'production'
+      ? true
+      : asBool(process.env.BOOKS_EDITOR_TOKEN_AUTH_ENABLED, true),
   /*
    * Runtime knobs below keep defensive middleware and admin token checks
    * configurable per deployment while remaining safe by default.
@@ -49,6 +59,7 @@ export const env = {
   mutatingRateLimitPerMinute: asInt(process.env.MUTATING_RATE_LIMIT_PER_MINUTE, 5),
   adminTokenStoreFile: process.env.ADMIN_TOKEN_STORE_FILE || 'data/admin-tokens.json',
   adminTokenPepper: process.env.ADMIN_TOKEN_PEPPER || 'local-dev-admin-token-pepper',
+  trustedClientOrigins: asList(process.env.TRUSTED_CLIENT_ORIGINS),
   failureReportHashSalt: process.env.FAILURE_REPORT_HASH_SALT || 'local-dev-report-hash-salt',
   webhookBinTtlSeconds: asInt(process.env.WEBHOOK_BIN_TTL_SECONDS, 24 * 60 * 60),
   webhookBinMaxBins: asInt(process.env.WEBHOOK_BIN_MAX_BINS, 300),
