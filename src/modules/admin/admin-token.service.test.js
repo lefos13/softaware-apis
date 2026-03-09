@@ -14,6 +14,7 @@ import {
   extendAccessToken,
   listAccessTokens,
   parseTokenTtl,
+  resetAccessTokenUsage,
   renewAccessToken,
   resolveStoredToken,
   revokeAccessToken,
@@ -55,7 +56,9 @@ test('CLI superadmin creation and access-token lifecycle work end to end', () =>
 
   const created = createAccessToken({
     alias: 'Books editor',
-    serviceFlags: [ACCESS_TOKEN_SERVICE_FLAGS.BOOKS_GREEK_EDITOR],
+    servicePolicies: {
+      [ACCESS_TOKEN_SERVICE_FLAGS.BOOKS_GREEK_EDITOR]: '100000_words',
+    },
     ttlSeconds: parseTokenTtl('30d'),
     actorTokenId: superadmin.tokenId,
   });
@@ -71,7 +74,10 @@ test('CLI superadmin creation and access-token lifecycle work end to end', () =>
   const updated = updateAccessToken({
     tokenId: created.record.tokenId,
     alias: 'Books editor updated',
-    serviceFlags: [ACCESS_TOKEN_SERVICE_FLAGS.BOOKS_GREEK_EDITOR, ACCESS_TOKEN_SERVICE_FLAGS.PDF],
+    servicePolicies: {
+      [ACCESS_TOKEN_SERVICE_FLAGS.BOOKS_GREEK_EDITOR]: '300000_words',
+      [ACCESS_TOKEN_SERVICE_FLAGS.PDF]: '30_per_day',
+    },
   });
   assert.equal(updated.alias, 'Books editor updated');
   assert.deepEqual(updated.serviceFlags, [
@@ -102,4 +108,10 @@ test('CLI superadmin creation and access-token lifecycle work end to end', () =>
   });
   assert.equal(extended.isActive, true);
   assert.ok(Date.parse(extended.expiresAt) > Date.parse(renewed.record.expiresAt));
+
+  const resetRecord = resetAccessTokenUsage({
+    tokenId: created.record.tokenId,
+  });
+  assert.equal(resetRecord.tokenId, created.record.tokenId);
+  assert.ok(Date.parse(resetRecord.usageResetAt || ''));
 });

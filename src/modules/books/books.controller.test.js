@@ -94,11 +94,13 @@ const createRequestMock = async (
 test('validateGreekEditorAccessController returns token metadata for validated sessions', async () => {
   const req = {
     get: () => '',
-    serviceAuth: {
-      tokenId: 'access-token-1',
-      alias: 'Books editor token',
-      serviceFlags: ['books_greek_editor'],
-      expiresAt: '2026-04-01T00:00:00.000Z',
+    accessPlan: {
+      token: {
+        tokenId: 'access-token-1',
+        alias: 'Books editor token',
+        serviceFlags: ['books_greek_editor'],
+        expiresAt: '2026-04-01T00:00:00.000Z',
+      },
     },
   };
   const res = createResponseMock();

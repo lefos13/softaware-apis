@@ -1,11 +1,12 @@
 {
-  "version": 2,
+  "version": 3,
   "tokens": [
     {
       "tokenId": "2c4a9880-5be7-42ae-b86a-7498582abbd1",
       "tokenType": "superadmin",
       "alias": "CLI superadmin",
       "serviceFlags": [],
+      "servicePolicies": {},
       "ttlSeconds": 2592000,
       "tokenHash": "a90be105fda7abd34e2c3596c217159acb9e8de4302b5daf13b44ab1ab836583",
       "createdAt": "2026-03-06T20:01:57.377Z",
@@ -16,13 +17,16 @@
       "renewedAt": null,
       "renewedByTokenId": null,
       "extendedAt": null,
-      "extendedByTokenId": null
+      "extendedByTokenId": null,
+      "usageCycleStartedAt": null,
+      "usageResetAt": null
     },
     {
       "tokenId": "46cc29cf-d834-4b1f-9458-d44e34b7b414",
       "tokenType": "superadmin",
       "alias": "CLI superadmin",
       "serviceFlags": [],
+      "servicePolicies": {},
       "ttlSeconds": 2592000,
       "tokenHash": "ad19a7f602ad319898ae1a68052b0168939304b342bfa5dfb28d0e713e94ae91",
       "createdAt": "2026-03-08T20:41:45.682Z",
@@ -33,30 +37,53 @@
       "renewedAt": null,
       "renewedByTokenId": null,
       "extendedAt": null,
-      "extendedByTokenId": null
+      "extendedByTokenId": null,
+      "usageCycleStartedAt": null,
+      "usageResetAt": null
     },
     {
       "tokenId": "06b9b5f2-c151-40ee-8010-e5a3ce7f0ddd",
       "tokenType": "access",
       "alias": "Book editor",
-      "serviceFlags": ["books_greek_editor", "image", "pdf", "tasks"],
+      "serviceFlags": ["books_greek_editor", "pdf", "image", "tasks"],
+      "servicePolicies": {
+        "books_greek_editor": {
+          "preset": "unlimited",
+          "kind": "unlimited"
+        },
+        "image": {
+          "preset": "unlimited",
+          "kind": "unlimited"
+        },
+        "pdf": {
+          "preset": "unlimited",
+          "kind": "unlimited"
+        },
+        "tasks": {
+          "preset": "unlimited",
+          "kind": "unlimited"
+        }
+      },
       "ttlSeconds": 2592000,
       "tokenHash": "8b2502191a3751baa3855f3a269100f0509dd87ab5328b4468fedbbf817e0665",
       "createdAt": "2026-03-08T20:44:34.950Z",
       "expiresAt": "2026-04-07T20:44:34.950Z",
-      "revokedAt": null,
-      "revocationReason": null,
-      "revokedByTokenId": null,
+      "revokedAt": "2026-03-09T22:51:56.266Z",
+      "revocationReason": "superadmin_revoke_selected",
+      "revokedByTokenId": "0be8a7c9-0008-4ffd-968f-1b192b0bb845",
       "renewedAt": null,
       "renewedByTokenId": "46cc29cf-d834-4b1f-9458-d44e34b7b414",
       "extendedAt": null,
-      "extendedByTokenId": null
+      "extendedByTokenId": null,
+      "usageCycleStartedAt": "2026-03-08T20:44:34.950Z",
+      "usageResetAt": null
     },
     {
       "tokenId": "e8db7482-cd8c-4ce2-bbbe-9f282f785b5e",
       "tokenType": "superadmin",
       "alias": "CLI superadmin",
       "serviceFlags": [],
+      "servicePolicies": {},
       "ttlSeconds": 2592000,
       "tokenHash": "accf160ed0a3a80d0f0acb8479a7b5ba6691389d4c365824e8bdb6f19f286de1",
       "createdAt": "2026-03-08T22:06:41.729Z",
@@ -67,7 +94,114 @@
       "renewedAt": null,
       "renewedByTokenId": null,
       "extendedAt": null,
-      "extendedByTokenId": null
+      "extendedByTokenId": null,
+      "usageCycleStartedAt": null,
+      "usageResetAt": null
+    },
+    {
+      "tokenId": "76b3ebbe-2879-4b32-8b03-b9b1ba089d82",
+      "tokenType": "superadmin",
+      "alias": "CLI superadmin",
+      "serviceFlags": [],
+      "servicePolicies": {},
+      "ttlSeconds": 2592000,
+      "tokenHash": "07b4f1b9c7e22050c0d634105673d3a751d260de31edade81665eb9b4fdbe73f",
+      "createdAt": "2026-03-09T08:14:46.138Z",
+      "expiresAt": "2026-04-08T08:14:46.139Z",
+      "revokedAt": null,
+      "revocationReason": null,
+      "revokedByTokenId": null,
+      "renewedAt": null,
+      "renewedByTokenId": null,
+      "extendedAt": null,
+      "extendedByTokenId": null,
+      "usageCycleStartedAt": null,
+      "usageResetAt": null
+    },
+    {
+      "tokenId": "298f4aba-2356-415f-a835-789329b2d81d",
+      "tokenType": "access",
+      "alias": "book editting",
+      "serviceFlags": ["books_greek_editor"],
+      "servicePolicies": {
+        "books_greek_editor": {
+          "preset": "unlimited",
+          "kind": "unlimited"
+        }
+      },
+      "ttlSeconds": 2592000,
+      "tokenHash": "ccf190dad9a2fdebd3835f05219f4380a9e563c5bb418916387bde61ecb6089b",
+      "createdAt": "2026-03-09T08:15:26.165Z",
+      "expiresAt": "2026-04-08T08:15:26.165Z",
+      "revokedAt": "2026-03-09T22:51:51.774Z",
+      "revocationReason": "superadmin_revoke_selected",
+      "revokedByTokenId": "0be8a7c9-0008-4ffd-968f-1b192b0bb845",
+      "renewedAt": null,
+      "renewedByTokenId": "76b3ebbe-2879-4b32-8b03-b9b1ba089d82",
+      "extendedAt": null,
+      "extendedByTokenId": null,
+      "usageCycleStartedAt": "2026-03-09T08:15:26.165Z",
+      "usageResetAt": null
+    },
+    {
+      "tokenId": "0be8a7c9-0008-4ffd-968f-1b192b0bb845",
+      "tokenType": "superadmin",
+      "alias": "CLI superadmin",
+      "serviceFlags": [],
+      "servicePolicies": {},
+      "ttlSeconds": 2592000,
+      "tokenHash": "e4b885696c2c6e59ebb47f62de7b3c81c2af8fce36432b95f3ccef721422c1da",
+      "createdAt": "2026-03-09T20:44:51.320Z",
+      "expiresAt": "2026-04-08T20:44:51.321Z",
+      "revokedAt": null,
+      "revocationReason": null,
+      "revokedByTokenId": null,
+      "renewedAt": null,
+      "renewedByTokenId": null,
+      "extendedAt": null,
+      "extendedByTokenId": null,
+      "usageCycleStartedAt": null,
+      "usageResetAt": null
+    },
+    {
+      "tokenId": "30e95914-91a7-4e70-88db-179b422860ce",
+      "tokenType": "access",
+      "alias": "test token",
+      "serviceFlags": ["books_greek_editor", "pdf", "image", "tasks"],
+      "servicePolicies": {
+        "books_greek_editor": {
+          "preset": "300000_words",
+          "kind": "words_total",
+          "wordsTotal": 300000
+        },
+        "image": {
+          "preset": "20_per_day",
+          "kind": "requests_per_day",
+          "requestsPerDay": 20
+        },
+        "pdf": {
+          "preset": "30_per_day",
+          "kind": "requests_per_day",
+          "requestsPerDay": 30
+        },
+        "tasks": {
+          "preset": "unlimited",
+          "kind": "unlimited"
+        }
+      },
+      "ttlSeconds": 2592000,
+      "tokenHash": "49ef646e1064d336504ecc10e01ccc60671142190e4c9c7bd8aa486bad4f0ef3",
+      "createdAt": "2026-03-09T22:09:25.396Z",
+      "expiresAt": "2026-05-08T22:09:25.396Z",
+      "revokedAt": null,
+      "revocationReason": null,
+      "revokedByTokenId": null,
+      "renewedAt": null,
+      "renewedByTokenId": "0be8a7c9-0008-4ffd-968f-1b192b0bb845",
+      "extendedAt": "2026-03-09T22:42:18.781Z",
+      "extendedByTokenId": "0be8a7c9-0008-4ffd-968f-1b192b0bb845",
+      "usageCycleStartedAt": "2026-03-09T22:09:25.396Z",
+      "usageResetAt": "2026-03-09T22:54:29.392Z"
     }
   ]
 }

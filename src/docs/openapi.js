@@ -4,6 +4,7 @@
  */
 import { env } from '../config/env.js';
 import { ACCESS_TOKEN_SERVICE_FLAG_LIST } from '../modules/admin/admin-token.constants.js';
+import { ACCESS_TOKEN_SERVICE_POLICY_PRESETS } from '../modules/access/access-policy.constants.js';
 
 const maxFileSizeMb = Math.floor(env.maxFileSizeBytes / (1024 * 1024));
 const maxTotalUploadMb = Math.floor(env.maxTotalUploadBytes / (1024 * 1024));
@@ -19,6 +20,7 @@ export function buildOpenApiSpec() {
     servers: [{ url: env.publicBaseUrl }],
     tags: [
       { name: 'Health', description: 'Service liveliness checks.' },
+      { name: 'Access', description: 'Shared free and token plan endpoints.' },
       { name: 'PDF', description: 'PDF processing endpoints.' },
       { name: 'Image', description: 'Image compression and format-conversion endpoints.' },
       { name: 'Books', description: 'Book and manuscript editing endpoints.' },
@@ -40,6 +42,127 @@ export function buildOpenApiSpec() {
               content: {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/HealthSuccessResponse' },
+                },
+              },
+            },
+            500: {
+              description: 'Unexpected server error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/access/plan': {
+        get: {
+          tags: ['Access'],
+          summary: 'Resolve the current caller access plan',
+          description:
+            'Returns the active free plan for the caller IP when `x-service-token` is absent, or the token-backed paid plan when a valid access token is supplied.',
+          operationId: 'getAccessPlan',
+          parameters: [
+            {
+              name: 'x-service-token',
+              in: 'header',
+              required: false,
+              schema: { type: 'string' },
+              description:
+                'Optional access token. When present and valid, the token plan overrides the anonymous free plan.',
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Resolved access plan',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/AccessPlanSuccessResponse' },
+                },
+              },
+            },
+            403: {
+              description: 'Invalid, expired, or revoked access token',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            500: {
+              description: 'Unexpected server error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/access/dashboard': {
+        get: {
+          tags: ['Access'],
+          summary: 'Fetch the token owner dashboard payload',
+          description:
+            'Returns the authenticated token summary, per-service remaining usage, and paginated action history for the calling access token.',
+          operationId: 'getAccessDashboard',
+          parameters: [
+            {
+              name: 'x-service-token',
+              in: 'header',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Access token to inspect. The dashboard is scoped to this token only.',
+            },
+            {
+              name: 'page',
+              in: 'query',
+              required: false,
+              schema: { type: 'integer', minimum: 1, default: 1 },
+            },
+            {
+              name: 'limit',
+              in: 'query',
+              required: false,
+              schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+            },
+            {
+              name: 'serviceKey',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', enum: ACCESS_TOKEN_SERVICE_FLAG_LIST },
+            },
+            {
+              name: 'status',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', enum: ['success', 'failed'] },
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Access dashboard payload',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/AccessDashboardSuccessResponse' },
+                },
+              },
+            },
+            401: {
+              description: 'Missing access token',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            403: {
+              description: 'Invalid, expired, or revoked access token',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
                 },
               },
             },
@@ -566,7 +689,7 @@ export function buildOpenApiSpec() {
         post: {
           tags: ['Books'],
           summary: 'Apply Greek literature editing rules to one Word (.docx) manuscript',
-          description: `Upload exactly one DOCX in \`files\` plus required \`editorOptions\` JSON. The service edits only the main body text of \`word/document.xml\`, applies the selected rules in fixed server order, and returns one corrected DOCX. If \`editorOptions.includeReport=true\`, the response is a ZIP package containing the corrected DOCX plus text and JSON change reports. Production requires \`x-service-token\` with the \`books_greek_editor\` service flag; non-production can bypass it only when \`BOOKS_EDITOR_TOKEN_AUTH_ENABLED=false\`. Limits: ${env.maxUploadFiles} files, ${maxFileSizeMb} MB each, ${maxTotalUploadMb} MB total.`,
+          description: `Upload exactly one DOCX in \`files\` plus required \`editorOptions\` JSON. The service edits only the main body text of \`word/document.xml\`, applies the selected rules in fixed server order, and returns one corrected DOCX. If \`editorOptions.includeReport=true\`, the response is a ZIP package containing the corrected DOCX plus text and JSON change reports. When the UI follows this call with \`/preview-report\` using the same \`flowSessionId\`, quota is billed once for the shared workflow. Production requires \`x-service-token\` with the \`books_greek_editor\` service flag; non-production can bypass it only when \`BOOKS_EDITOR_TOKEN_AUTH_ENABLED=false\`. Limits: ${env.maxUploadFiles} files, ${maxFileSizeMb} MB each, ${maxTotalUploadMb} MB total.`,
           operationId: 'applyGreekEditorRules',
           parameters: [
             {
@@ -576,6 +699,14 @@ export function buildOpenApiSpec() {
               schema: { type: 'string' },
               description:
                 'Optional client-provided task id used for progress polling. If omitted, backend generates one.',
+            },
+            {
+              name: 'flowSessionId',
+              in: 'query',
+              required: false,
+              schema: { type: 'string' },
+              description:
+                'Optional flow session id used to group apply + preview calls into one quota charge. If omitted, taskId is used as fallback.',
             },
             {
               name: 'x-service-token',
@@ -723,6 +854,14 @@ export function buildOpenApiSpec() {
               schema: { type: 'string' },
               description:
                 'Optional client-provided task id used for progress polling. If omitted, backend generates one.',
+            },
+            {
+              name: 'flowSessionId',
+              in: 'query',
+              required: false,
+              schema: { type: 'string' },
+              description:
+                'Optional flow session id used to group all calls in one editor run for quota accounting. If omitted, taskId is used as fallback.',
             },
             {
               name: 'x-service-token',
@@ -907,7 +1046,7 @@ export function buildOpenApiSpec() {
           tags: ['Books'],
           summary: 'Generate a JSON report preview for one Word (.docx) manuscript',
           description:
-            'Upload exactly one DOCX in `files` plus `editorOptions` JSON and receive a JSON preview of the report that would accompany the corrected manuscript package. Production requires `x-service-token` with the `books_greek_editor` service flag; non-production can bypass it only when `BOOKS_EDITOR_TOKEN_AUTH_ENABLED=false`.',
+            'Upload exactly one DOCX in `files` plus `editorOptions` JSON and receive a JSON preview of the report that would accompany the corrected manuscript package. When this preview shares the same `flowSessionId` as a prior `/apply` request for the same workflow, quota is not charged a second time. Production requires `x-service-token` with the `books_greek_editor` service flag; non-production can bypass it only when `BOOKS_EDITOR_TOKEN_AUTH_ENABLED=false`.',
           operationId: 'previewGreekEditorReport',
           parameters: [
             {
@@ -917,6 +1056,14 @@ export function buildOpenApiSpec() {
               schema: { type: 'string' },
               description:
                 'Optional client-provided task id used for progress polling. If omitted, backend generates one.',
+            },
+            {
+              name: 'flowSessionId',
+              in: 'query',
+              required: false,
+              schema: { type: 'string' },
+              description:
+                'Optional flow session id used to group apply + preview calls into one quota charge. If omitted, taskId is used as fallback.',
             },
             {
               name: 'x-service-token',
@@ -2252,7 +2399,7 @@ export function buildOpenApiSpec() {
           tags: ['Admin'],
           summary: 'Create an access token',
           description:
-            'Creates a new access token with a user-defined alias, TTL, and one or more service flags. Superadmin tokens cannot be created from the UI.',
+            'Creates a new access token with a user-defined alias, TTL, and one or more per-service policy presets. Superadmin tokens cannot be created from the UI.',
           operationId: 'createAccessToken',
           parameters: [
             {
@@ -2281,7 +2428,7 @@ export function buildOpenApiSpec() {
               },
             },
             400: {
-              description: 'Invalid alias, ttl, or serviceFlags payload',
+              description: 'Invalid alias, ttl, or servicePolicies payload',
               content: {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/ErrorResponse' },
@@ -2336,7 +2483,7 @@ export function buildOpenApiSpec() {
           tags: ['Admin'],
           summary: 'Edit an access token',
           description:
-            'Updates the alias and service flags for an existing access token. The underlying secret does not change.',
+            'Updates the alias and per-service policy presets for an existing access token. The underlying secret does not change.',
           operationId: 'updateAccessToken',
           parameters: [
             {
@@ -2372,7 +2519,7 @@ export function buildOpenApiSpec() {
               },
             },
             400: {
-              description: 'Invalid alias, token type, or service flags',
+              description: 'Invalid alias, token type, or service policies',
               content: {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/ErrorResponse' },
@@ -2509,7 +2656,7 @@ export function buildOpenApiSpec() {
           tags: ['Admin'],
           summary: 'Renew a revoked or expired access token',
           description:
-            'Generates a new plaintext secret for a revoked or expired access token and resets the token to active state.',
+            'Generates a new plaintext secret for a revoked or expired access token, optionally updates policy presets, and resets the token to active state with a fresh usage cycle.',
           operationId: 'renewAccessToken',
           parameters: [
             {
@@ -2545,7 +2692,7 @@ export function buildOpenApiSpec() {
               },
             },
             400: {
-              description: 'Invalid ttl or unsupported token type',
+              description: 'Invalid ttl, service policies, or unsupported token type',
               content: {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/ErrorResponse' },
@@ -2677,6 +2824,89 @@ export function buildOpenApiSpec() {
             },
             409: {
               description: 'Revoked token cannot be extended',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            429: {
+              description: 'Mutating request rate limit exceeded for source IP',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            500: {
+              description: 'Unexpected server error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/admin/tokens/{tokenId}/reset-usage': {
+        post: {
+          tags: ['Admin'],
+          summary: 'Reset an access token usage counters',
+          description:
+            'Resets the active usage counters for one access token without deleting its history. Daily and lifetime quota calculations start from the reset timestamp.',
+          operationId: 'resetAccessTokenUsage',
+          parameters: [
+            {
+              name: 'x-admin-token',
+              in: 'header',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Superadmin token minted via server-side CLI.',
+            },
+            {
+              name: 'tokenId',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
+              description: 'Access token id whose usage should be reset.',
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Access token usage reset successfully',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/AccessTokenRecordSuccessResponse' },
+                },
+              },
+            },
+            400: {
+              description: 'Unsupported token type',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            401: {
+              description: 'Missing superadmin token',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            403: {
+              description: 'Invalid token or token role is not superadmin',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            404: {
+              description: 'Access token was not found',
               content: {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/ErrorResponse' },
@@ -3110,12 +3340,206 @@ export function buildOpenApiSpec() {
           },
           required: ['success', 'message', 'data', 'meta'],
         },
+        AccessServicePolicyMap: {
+          type: 'object',
+          properties: {
+            books_greek_editor: {
+              nullable: true,
+              type: 'string',
+              enum: Object.keys(ACCESS_TOKEN_SERVICE_POLICY_PRESETS.books_greek_editor),
+            },
+            image: {
+              nullable: true,
+              type: 'string',
+              enum: Object.keys(ACCESS_TOKEN_SERVICE_POLICY_PRESETS.image),
+            },
+            pdf: {
+              nullable: true,
+              type: 'string',
+              enum: Object.keys(ACCESS_TOKEN_SERVICE_POLICY_PRESETS.pdf),
+            },
+            tasks: {
+              nullable: true,
+              type: 'string',
+              enum: Object.keys(ACCESS_TOKEN_SERVICE_POLICY_PRESETS.tasks),
+            },
+          },
+        },
+        AccessPlanQuotaPart: {
+          type: 'object',
+          properties: {
+            used: { type: 'integer', minimum: 0, example: 3 },
+            remaining: { nullable: true, type: 'integer', example: 17 },
+            limit: { nullable: true, type: 'integer', example: 20 },
+            resetAt: { nullable: true, type: 'string', format: 'date-time' },
+            timezone: { nullable: true, type: 'string', example: 'UTC' },
+          },
+          required: ['used', 'remaining', 'limit', 'resetAt'],
+        },
+        AccessPlanQuota: {
+          type: 'object',
+          properties: {
+            serviceKey: {
+              type: 'string',
+              enum: ACCESS_TOKEN_SERVICE_FLAG_LIST,
+            },
+            policy: {
+              nullable: true,
+              type: 'object',
+              additionalProperties: true,
+            },
+            requests: { $ref: '#/components/schemas/AccessPlanQuotaPart' },
+            words: { $ref: '#/components/schemas/AccessPlanQuotaPart' },
+          },
+          required: ['serviceKey', 'policy', 'requests', 'words'],
+        },
+        AccessPlanServiceSummary: {
+          type: 'object',
+          properties: {
+            serviceKey: {
+              type: 'string',
+              enum: ACCESS_TOKEN_SERVICE_FLAG_LIST,
+            },
+            enabled: { type: 'boolean', example: true },
+            policy: {
+              nullable: true,
+              type: 'object',
+              additionalProperties: true,
+            },
+            usage: {
+              type: 'object',
+              properties: {
+                dailyRequests: { type: 'integer', minimum: 0, example: 1 },
+                dailyWords: { type: 'integer', minimum: 0, example: 1200 },
+                cycleRequests: { type: 'integer', minimum: 0, example: 1 },
+                cycleWords: { type: 'integer', minimum: 0, example: 1200 },
+              },
+              required: ['dailyRequests', 'dailyWords', 'cycleRequests', 'cycleWords'],
+            },
+            quota: { $ref: '#/components/schemas/AccessPlanQuota' },
+          },
+          required: ['serviceKey', 'enabled', 'policy', 'usage', 'quota'],
+        },
+        AccessHistoryItem: {
+          type: 'object',
+          properties: {
+            eventId: { type: 'integer', example: 42 },
+            createdAt: { type: 'string', format: 'date-time' },
+            serviceKey: {
+              type: 'string',
+              enum: ACCESS_TOKEN_SERVICE_FLAG_LIST,
+            },
+            operationName: { type: 'string', example: 'pdf_merge' },
+            planType: { type: 'string', enum: ['free', 'token'] },
+            requestId: { nullable: true, type: 'string' },
+            taskId: { nullable: true, type: 'string' },
+            status: { type: 'string', enum: ['success', 'failed'] },
+            consumedRequests: { type: 'integer', minimum: 0, example: 1 },
+            consumedWords: { type: 'integer', minimum: 0, example: 1200 },
+            remaining: {
+              type: 'object',
+              additionalProperties: true,
+            },
+            metadata: {
+              type: 'object',
+              additionalProperties: true,
+            },
+          },
+          required: [
+            'eventId',
+            'createdAt',
+            'serviceKey',
+            'operationName',
+            'planType',
+            'requestId',
+            'taskId',
+            'status',
+            'consumedRequests',
+            'consumedWords',
+            'remaining',
+            'metadata',
+          ],
+        },
+        AccessHistoryPayload: {
+          type: 'object',
+          properties: {
+            page: { type: 'integer', minimum: 1, example: 1 },
+            limit: { type: 'integer', minimum: 1, example: 20 },
+            count: { type: 'integer', minimum: 0, example: 20 },
+            total: { type: 'integer', minimum: 0, example: 120 },
+            items: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/AccessHistoryItem' },
+            },
+          },
+          required: ['page', 'limit', 'count', 'total', 'items'],
+        },
+        AccessPlanPayload: {
+          type: 'object',
+          properties: {
+            planType: { type: 'string', enum: ['free', 'token'], example: 'token' },
+            token: {
+              nullable: true,
+              allOf: [{ $ref: '#/components/schemas/BooksGreekEditorAccessTokenPayload' }],
+            },
+            services: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/AccessPlanServiceSummary' },
+            },
+            enabledServices: {
+              type: 'array',
+              items: {
+                type: 'string',
+                enum: ACCESS_TOKEN_SERVICE_FLAG_LIST,
+              },
+            },
+            defaults: {
+              nullable: true,
+              type: 'object',
+              additionalProperties: true,
+            },
+          },
+          required: ['planType', 'token', 'services', 'enabledServices', 'defaults'],
+        },
+        AccessPlanSuccessResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            message: { type: 'string', example: 'Access token plan fetched successfully' },
+            data: { $ref: '#/components/schemas/AccessPlanPayload' },
+            meta: { $ref: '#/components/schemas/ResponseMeta' },
+          },
+          required: ['success', 'message', 'data', 'meta'],
+        },
+        AccessDashboardPayload: {
+          type: 'object',
+          properties: {
+            token: { $ref: '#/components/schemas/BooksGreekEditorAccessTokenPayload' },
+            services: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/AccessPlanServiceSummary' },
+            },
+            history: { $ref: '#/components/schemas/AccessHistoryPayload' },
+          },
+          required: ['token', 'services', 'history'],
+        },
+        AccessDashboardSuccessResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            message: { type: 'string', example: 'Access dashboard fetched successfully' },
+            data: { $ref: '#/components/schemas/AccessDashboardPayload' },
+            meta: { $ref: '#/components/schemas/ResponseMeta' },
+          },
+          required: ['success', 'message', 'data', 'meta'],
+        },
         AccessTokenInventoryItem: {
           type: 'object',
           properties: {
             tokenId: { type: 'string', example: 'e41a494b-ca7b-4790-8f30-6fba24ed5685' },
             tokenType: { type: 'string', enum: ['access'], example: 'access' },
             alias: { type: 'string', example: 'Books editor client' },
+            servicePolicies: { $ref: '#/components/schemas/AccessServicePolicyMap' },
             serviceFlags: {
               type: 'array',
               items: {
@@ -3137,6 +3561,12 @@ export function buildOpenApiSpec() {
             renewedByTokenId: { nullable: true, type: 'string' },
             extendedAt: { nullable: true, type: 'string', format: 'date-time' },
             extendedByTokenId: { nullable: true, type: 'string' },
+            usageCycleStartedAt: { nullable: true, type: 'string', format: 'date-time' },
+            usageResetAt: { nullable: true, type: 'string', format: 'date-time' },
+            usageSummary: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/AccessPlanServiceSummary' },
+            },
             isExpired: { type: 'boolean', example: false },
             isRevoked: { type: 'boolean', example: false },
             isActive: { type: 'boolean', example: true },
@@ -3145,6 +3575,7 @@ export function buildOpenApiSpec() {
             'tokenId',
             'tokenType',
             'alias',
+            'servicePolicies',
             'serviceFlags',
             'createdAt',
             'expiresAt',
@@ -3155,6 +3586,8 @@ export function buildOpenApiSpec() {
             'renewedByTokenId',
             'extendedAt',
             'extendedByTokenId',
+            'usageCycleStartedAt',
+            'usageResetAt',
             'isExpired',
             'isRevoked',
             'isActive',
@@ -3176,8 +3609,15 @@ export function buildOpenApiSpec() {
               },
               example: ACCESS_TOKEN_SERVICE_FLAG_LIST,
             },
+            availableServicePolicies: {
+              type: 'object',
+              additionalProperties: {
+                type: 'array',
+                items: { type: 'string' },
+              },
+            },
           },
-          required: ['count', 'tokens', 'availableServiceFlags'],
+          required: ['count', 'tokens', 'availableServiceFlags', 'availableServicePolicies'],
         },
         AccessTokensListSuccessResponse: {
           type: 'object',
@@ -3194,38 +3634,23 @@ export function buildOpenApiSpec() {
           properties: {
             alias: { type: 'string', example: 'Books editor client' },
             ttl: { type: 'string', example: '30d' },
-            serviceFlags: {
-              type: 'array',
-              minItems: 1,
-              items: {
-                type: 'string',
-                enum: ACCESS_TOKEN_SERVICE_FLAG_LIST,
-              },
-              example: ['books_greek_editor'],
-            },
+            servicePolicies: { $ref: '#/components/schemas/AccessServicePolicyMap' },
           },
-          required: ['alias', 'ttl', 'serviceFlags'],
+          required: ['alias', 'ttl', 'servicePolicies'],
         },
         AccessTokenUpdateRequest: {
           type: 'object',
           properties: {
             alias: { type: 'string', example: 'Books editor client' },
-            serviceFlags: {
-              type: 'array',
-              minItems: 1,
-              items: {
-                type: 'string',
-                enum: ACCESS_TOKEN_SERVICE_FLAG_LIST,
-              },
-              example: ['books_greek_editor', 'pdf'],
-            },
+            servicePolicies: { $ref: '#/components/schemas/AccessServicePolicyMap' },
           },
-          required: ['alias', 'serviceFlags'],
+          required: ['alias', 'servicePolicies'],
         },
         AccessTokenTtlRequest: {
           type: 'object',
           properties: {
             ttl: { type: 'string', example: '30d' },
+            servicePolicies: { $ref: '#/components/schemas/AccessServicePolicyMap' },
           },
           required: ['ttl'],
         },

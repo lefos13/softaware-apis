@@ -317,6 +317,17 @@ const mergeReplacementCounts = (target, next) => {
   });
 };
 
+const countWords = (value) =>
+  String(value || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+
+const readParagraphText = (paragraphNodes) =>
+  collectParagraphTextNodes(paragraphNodes)
+    .map((node) => readTextNode(node))
+    .join('');
+
 export async function applyGreekEditorToText(inputText, rawEditorOptions, onProgress) {
   const editorOptions = normalizeBooksEditorOptions(rawEditorOptions);
   const normalizedText = String(inputText || '');
@@ -365,6 +376,7 @@ export async function applyGreekEditorToText(inputText, rawEditorOptions, onProg
     summary,
     report: reportArtifacts?.report || null,
     reportText: reportArtifacts?.reportText || '',
+    processedWordCount: countWords(normalizedText),
   };
 }
 
@@ -437,6 +449,10 @@ export async function applyGreekEditorToDocxBuffer(file, rawEditorOptions, onPro
   const changes = [];
   let changedParagraphs = 0;
   let totalReplacements = 0;
+  const processedWordCount = paragraphs.reduce(
+    (sum, paragraphNodes) => sum + countWords(readParagraphText(paragraphNodes)),
+    0,
+  );
 
   paragraphs.forEach((paragraphNodes, index) => {
     const result = rewriteParagraphTextNodes(paragraphNodes, editorOptions, index + 1);
@@ -509,6 +525,7 @@ export async function applyGreekEditorToDocxBuffer(file, rawEditorOptions, onPro
     reportText: reportArtifacts?.reportText || '',
     outputKind: editorOptions.includeReport ? 'zip' : 'docx',
     editedFileName,
+    processedWordCount,
   };
 }
 
@@ -523,5 +540,6 @@ export async function previewGreekEditorDocxReport(file, rawEditorOptions, onPro
     summary: result.summary,
     report: result.report,
     reportText: result.reportText,
+    processedWordCount: result.processedWordCount,
   };
 }

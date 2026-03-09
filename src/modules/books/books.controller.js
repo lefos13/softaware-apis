@@ -11,6 +11,7 @@ import {
 import { buildResponseMeta, sendSuccess } from '../../common/utils/api-response.js';
 import { ApiError } from '../../common/utils/api-error.js';
 import { env } from '../../config/env.js';
+import { assertServiceQuota } from '../access/access-usage.service.js';
 import {
   applyGreekEditorToDocxBuffer,
   applyGreekEditorToText,
@@ -89,18 +90,35 @@ const ensureFeatureEnabled = () => {
   }
 };
 
+const assertBooksWordQuota = (req, wordCount) => {
+  if (!req.accessPlan) {
+    return;
+  }
+
+  assertServiceQuota({
+    actorKey: req.accessPlan.actorKey,
+    serviceKey: req.accessPlan.serviceKey,
+    servicePolicy: req.accessPlan.servicePolicy,
+    usageCycleStartedAt: req.accessPlan.usageCycleStartedAt,
+    usageResetAt: req.accessPlan.usageResetAt,
+    incomingRequests: 1,
+    incomingWords: wordCount,
+    billingKey: req.accessPlan.billingKey,
+  });
+};
+
 /*
  * The access handshake returns one small authenticated payload so the browser
  * can restore or reject a persisted editor token before exposing the editor UI.
  */
 const buildEditorAccessPayload = (req) => ({
   authEnabled: env.booksEditorTokenAuthEnabled,
-  token: req.serviceAuth
+  token: req.accessPlan?.token
     ? {
-        tokenId: req.serviceAuth.tokenId,
-        alias: req.serviceAuth.alias,
-        serviceFlags: req.serviceAuth.serviceFlags,
-        expiresAt: req.serviceAuth.expiresAt,
+        tokenId: req.accessPlan.token.tokenId,
+        alias: req.accessPlan.token.alias,
+        serviceFlags: req.accessPlan.token.serviceFlags,
+        expiresAt: req.accessPlan.token.expiresAt,
       }
     : null,
 });
@@ -180,6 +198,17 @@ export async function applyGreekEditorController(req, res, next) {
     const result = await applyGreekEditorToDocxBuffer(files[0], editorOptions, (progressUpdate) => {
       updateTaskProgress(taskId, progressUpdate);
     });
+    assertBooksWordQuota(req, result.processedWordCount);
+    req.accessUsage = {
+      consumedRequests: 1,
+      consumedWords: result.processedWordCount,
+      metadata: {
+        inputType: 'docx',
+        includeReport: editorOptions.includeReport === true,
+        changedParagraphs: result.summary?.changedParagraphs || 0,
+        totalReplacements: result.summary?.totalReplacements || 0,
+      },
+    };
     const binaryOutput = resolveBinaryOutput(files[0].originalname, result.outputKind);
 
     updateTaskProgress(taskId, {
@@ -248,6 +277,16 @@ export async function applyGreekEditorTextController(req, res, next) {
         updateTaskProgress(taskId, progressUpdate);
       },
     );
+    assertBooksWordQuota(req, result.processedWordCount);
+    req.accessUsage = {
+      consumedRequests: 1,
+      consumedWords: result.processedWordCount,
+      metadata: {
+        inputType: 'text',
+        includeReport: payload.editorOptions.includeReport === true,
+        totalReplacements: result.summary?.totalReplacements || 0,
+      },
+    };
 
     updateTaskProgress(taskId, {
       progress: 99,
@@ -312,6 +351,17 @@ export async function previewGreekEditorReportController(req, res, next) {
     const result = await previewGreekEditorDocxReport(files[0], editorOptions, (progressUpdate) => {
       updateTaskProgress(taskId, progressUpdate);
     });
+    assertBooksWordQuota(req, result.processedWordCount);
+    req.accessUsage = {
+      consumedRequests: 1,
+      consumedWords: result.processedWordCount,
+      metadata: {
+        inputType: 'docx',
+        includeReport: true,
+        previewOnly: true,
+        totalReplacements: result.summary?.totalReplacements || 0,
+      },
+    };
 
     updateTaskProgress(taskId, {
       progress: 99,

@@ -59,6 +59,8 @@ export const env = {
   mutatingRateLimitPerMinute: asInt(process.env.MUTATING_RATE_LIMIT_PER_MINUTE, 5),
   adminTokenStoreFile: process.env.ADMIN_TOKEN_STORE_FILE || 'data/admin-tokens.json',
   adminTokenPepper: process.env.ADMIN_TOKEN_PEPPER || 'local-dev-admin-token-pepper',
+  accessUsageStoreFile: process.env.ACCESS_USAGE_STORE_FILE || 'data/access-usage.sqlite',
+  accessUsageHashSalt: process.env.ACCESS_USAGE_HASH_SALT || 'local-dev-access-usage-hash-salt',
   trustedClientOrigins: asList(process.env.TRUSTED_CLIENT_ORIGINS),
   failureReportHashSalt: process.env.FAILURE_REPORT_HASH_SALT || 'local-dev-report-hash-salt',
   webhookBinTtlSeconds: asInt(process.env.WEBHOOK_BIN_TTL_SECONDS, 24 * 60 * 60),

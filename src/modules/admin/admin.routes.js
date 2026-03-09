@@ -7,12 +7,15 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { ApiError } from '../../common/utils/api-error.js';
 import { sendSuccess } from '../../common/utils/api-response.js';
+import { buildPlanServicesSummary } from '../access/access-usage.service.js';
 import { requireSuperAdminToken } from './admin-auth.middleware.js';
 import {
   createAccessToken,
   extendAccessToken,
+  getAccessTokenRecordById,
   listAccessTokens,
   parseTokenTtl,
+  resetAccessTokenUsage,
   renewAccessToken,
   revokeAccessToken,
   updateAccessToken,
@@ -123,7 +126,7 @@ const sanitizeReportForAdmin = (report, fileName) => {
 const parseTokenPayload = (body) => {
   return {
     alias: body?.alias,
-    serviceFlags: body?.serviceFlags,
+    servicePolicies: body?.servicePolicies,
     ttlSeconds: parseTokenTtl(body?.ttl || '30d'),
   };
 };
@@ -210,9 +213,27 @@ adminRouter.get('/reports/:fileName', (req, res, next) => {
 
 adminRouter.get('/tokens', (req, res, next) => {
   try {
+    const tokenData = listAccessTokens();
+    const tokens = tokenData.tokens.map((tokenItem) => {
+      const tokenRecord = getAccessTokenRecordById(tokenItem.tokenId);
+      return {
+        ...tokenItem,
+        usageSummary: buildPlanServicesSummary({
+          actorKey: tokenItem.tokenId,
+          planType: 'token',
+          servicePolicies: tokenRecord.servicePolicies,
+          usageCycleStartedAt: tokenRecord.usageCycleStartedAt,
+          usageResetAt: tokenRecord.usageResetAt,
+        }).filter((serviceItem) => serviceItem.enabled),
+      };
+    });
+
     sendSuccess(res, req, {
       message: 'Access tokens fetched successfully',
-      data: listAccessTokens(),
+      data: {
+        ...tokenData,
+        tokens,
+      },
     });
   } catch (error) {
     next(error);
@@ -242,7 +263,7 @@ adminRouter.patch('/tokens/:tokenId', (req, res, next) => {
     const record = updateAccessToken({
       tokenId: req.params.tokenId,
       alias: req.body?.alias,
-      serviceFlags: req.body?.serviceFlags,
+      servicePolicies: req.body?.servicePolicies,
     });
 
     sendSuccess(res, req, {
@@ -276,6 +297,7 @@ adminRouter.post('/tokens/:tokenId/renew', (req, res, next) => {
     const result = renewAccessToken({
       tokenId: req.params.tokenId,
       ttlSeconds,
+      servicePolicies: req.body?.servicePolicies,
       actorTokenId: req.adminAuth?.tokenId || null,
     });
 
@@ -299,6 +321,21 @@ adminRouter.post('/tokens/:tokenId/extend', (req, res, next) => {
 
     sendSuccess(res, req, {
       message: 'Access token extended successfully',
+      data: { record },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post('/tokens/:tokenId/reset-usage', (req, res, next) => {
+  try {
+    const record = resetAccessTokenUsage({
+      tokenId: req.params.tokenId,
+    });
+
+    sendSuccess(res, req, {
+      message: 'Access token usage reset successfully',
       data: { record },
     });
   } catch (error) {

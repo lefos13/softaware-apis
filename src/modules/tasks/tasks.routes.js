@@ -7,10 +7,13 @@ import { ApiError } from '../../common/utils/api-error.js';
 import { sendSuccess } from '../../common/utils/api-response.js';
 import { getTaskProgress } from '../../common/services/task-progress-store.js';
 import { requireTrustedClient } from '../../common/middleware/trusted-client.middleware.js';
+import { resolveServiceAccessPlan } from '../access/access-plan.middleware.js';
+import { ACCESS_TOKEN_SERVICE_FLAGS } from '../admin/admin-token.constants.js';
 
 const tasksRouter = Router();
 
 tasksRouter.use(requireTrustedClient);
+tasksRouter.use(resolveServiceAccessPlan(ACCESS_TOKEN_SERVICE_FLAGS.TASKS, 'task_progress_lookup'));
 
 tasksRouter.get('/:taskId', (req, res, next) => {
   try {

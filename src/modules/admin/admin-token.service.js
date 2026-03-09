@@ -8,9 +8,16 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname, resolve } from 'node:path';
 import { ApiError } from '../../common/utils/api-error.js';
 import { env } from '../../config/env.js';
+import {
+  ACCESS_TOKEN_SERVICE_POLICY_PRESETS,
+  DEFAULT_LEGACY_TOKEN_SERVICE_POLICIES,
+  clonePolicy,
+  deriveServiceFlagsFromPolicies,
+  getTokenPolicyPresetNames,
+} from '../access/access-policy.constants.js';
 import { ACCESS_TOKEN_SERVICE_FLAG_LIST, TOKEN_TYPES } from './admin-token.constants.js';
 
-const STORE_VERSION = 2;
+const STORE_VERSION = 3;
 const MAX_ALIAS_LENGTH = 80;
 
 const parseDurationToSeconds = (rawValue) => {
@@ -124,6 +131,91 @@ const normalizeServiceFlags = (serviceFlags, { required = true, field = 'service
   return normalizedFlags;
 };
 
+/*
+ * Service policies become the source of truth for access tokens so quotas and
+ * enabled-service flags always travel together through admin create/edit flows.
+ */
+const normalizeServicePolicies = (
+  rawPolicies,
+  {
+    required = true,
+    field = 'servicePolicies',
+    fallbackServiceFlags = [],
+    allowLegacyUnlimitedFallback = true,
+  } = {},
+) => {
+  const input =
+    rawPolicies && typeof rawPolicies === 'object' && !Array.isArray(rawPolicies)
+      ? rawPolicies
+      : {};
+  const normalizedPolicies = {};
+  const details = [];
+
+  Object.entries(input).forEach(([serviceKey, presetValue]) => {
+    const normalizedServiceKey = String(serviceKey || '').trim();
+    if (!normalizedServiceKey) {
+      return;
+    }
+
+    if (!ACCESS_TOKEN_SERVICE_FLAG_LIST.includes(normalizedServiceKey)) {
+      details.push({
+        field,
+        issue: `Unsupported service policy key ${normalizedServiceKey}`,
+      });
+      return;
+    }
+
+    const preset =
+      typeof presetValue === 'object' && presetValue !== null
+        ? String(presetValue.preset || '').trim()
+        : String(presetValue || '').trim();
+    const presetCatalog = ACCESS_TOKEN_SERVICE_POLICY_PRESETS[normalizedServiceKey] || {};
+    if (!presetCatalog[preset]) {
+      details.push({
+        field: `${field}.${normalizedServiceKey}`,
+        issue: `Unsupported preset ${preset || '(empty)'}`,
+      });
+      return;
+    }
+
+    normalizedPolicies[normalizedServiceKey] = clonePolicy(presetCatalog[preset]);
+  });
+
+  if (Object.keys(normalizedPolicies).length === 0 && allowLegacyUnlimitedFallback) {
+    normalizeServiceFlags(fallbackServiceFlags, { required: false, field: 'serviceFlags' }).forEach(
+      (serviceKey) => {
+        normalizedPolicies[serviceKey] = clonePolicy(
+          DEFAULT_LEGACY_TOKEN_SERVICE_POLICIES[serviceKey],
+        );
+      },
+    );
+  }
+
+  if (details.length > 0) {
+    throw new ApiError(
+      400,
+      'INVALID_SERVICE_POLICIES',
+      'servicePolicies contain unsupported values',
+      {
+        details,
+      },
+    );
+  }
+
+  if (required && Object.keys(normalizedPolicies).length === 0) {
+    throw new ApiError(
+      400,
+      'INVALID_SERVICE_POLICIES',
+      'servicePolicies must contain at least one enabled service',
+      {
+        details: [{ field, issue: 'Select at least one service policy preset' }],
+      },
+    );
+  }
+
+  return normalizedPolicies;
+};
+
 const validateTtlSeconds = (ttlSeconds, field = 'ttl') => {
   if (!Number.isInteger(ttlSeconds) || ttlSeconds < 60 || ttlSeconds > 365 * 24 * 60 * 60) {
     throw new ApiError(
@@ -178,10 +270,20 @@ const normalizeStoreRecord = (record = {}) => {
       : TOKEN_TYPES.ACCESS;
 
   const ttlSeconds = Number.parseInt(record?.ttlSeconds, 10);
-  const serviceFlags =
+  const servicePolicies =
     tokenType === TOKEN_TYPES.ACCESS
-      ? normalizeServiceFlags(record?.serviceFlags, { required: false })
-      : [];
+      ? normalizeServicePolicies(record?.servicePolicies, {
+          required: false,
+          fallbackServiceFlags: record?.serviceFlags,
+          allowLegacyUnlimitedFallback: true,
+        })
+      : {};
+  const serviceFlags =
+    tokenType === TOKEN_TYPES.ACCESS ? deriveServiceFlagsFromPolicies(servicePolicies) : [];
+  const createdAt = record?.createdAt || new Date().toISOString();
+  const renewedAt = record?.renewedAt || null;
+  const usageCycleStartedAt =
+    tokenType === TOKEN_TYPES.ACCESS ? record?.usageCycleStartedAt || renewedAt || createdAt : null;
 
   return {
     tokenId: String(record?.tokenId || randomUUID()),
@@ -191,9 +293,10 @@ const normalizeStoreRecord = (record = {}) => {
         ? normalizeAliasValue(record?.alias || 'CLI superadmin') || 'CLI superadmin'
         : normalizeAliasValue(record?.alias || toLegacyAccessAlias(record)) || 'Access token',
     serviceFlags,
+    servicePolicies,
     ttlSeconds: Number.isInteger(ttlSeconds) && ttlSeconds > 0 ? ttlSeconds : 30 * 24 * 60 * 60,
     tokenHash,
-    createdAt: record?.createdAt || new Date().toISOString(),
+    createdAt,
     expiresAt:
       record?.expiresAt ||
       new Date(
@@ -202,10 +305,12 @@ const normalizeStoreRecord = (record = {}) => {
     revokedAt: record?.revokedAt || null,
     revocationReason: record?.revocationReason || null,
     revokedByTokenId: record?.revokedByTokenId || null,
-    renewedAt: record?.renewedAt || null,
+    renewedAt,
     renewedByTokenId: record?.renewedByTokenId || null,
     extendedAt: record?.extendedAt || null,
     extendedByTokenId: record?.extendedByTokenId || null,
+    usageCycleStartedAt,
+    usageResetAt: tokenType === TOKEN_TYPES.ACCESS ? record?.usageResetAt || null : null,
   };
 };
 
@@ -269,17 +374,26 @@ const assertAccessTokenRecord = (record, field = 'tokenId') => {
 const buildPlainToken = () => `sat_${randomBytes(32).toString('hex')}`;
 
 /*
- * Public token metadata includes alias, service flags, lifecycle markers, and
- * current-state booleans while continuing to omit hashes and plaintext values.
+ * Public token metadata includes policy presets, derived service flags, and
+ * lifecycle markers while continuing to omit hashes and plaintext values.
  */
-const toPublicTokenRecord = (record) => ({
+export const toPublicTokenRecord = (record) => ({
   tokenId: String(record?.tokenId || ''),
   tokenType: String(record?.tokenType || TOKEN_TYPES.ACCESS),
   alias: normalizeAliasValue(record?.alias || ''),
   serviceFlags:
     record?.tokenType === TOKEN_TYPES.ACCESS
-      ? normalizeServiceFlags(record?.serviceFlags, { required: false })
+      ? deriveServiceFlagsFromPolicies(record?.servicePolicies || {})
       : [],
+  servicePolicies:
+    record?.tokenType === TOKEN_TYPES.ACCESS
+      ? Object.fromEntries(
+          Object.entries(record?.servicePolicies || {}).map(([serviceKey, policy]) => [
+            serviceKey,
+            String(policy?.preset || ''),
+          ]),
+        )
+      : {},
   createdAt: record?.createdAt || null,
   expiresAt: record?.expiresAt || null,
   revokedAt: record?.revokedAt || null,
@@ -289,10 +403,20 @@ const toPublicTokenRecord = (record) => ({
   renewedByTokenId: record?.renewedByTokenId || null,
   extendedAt: record?.extendedAt || null,
   extendedByTokenId: record?.extendedByTokenId || null,
+  usageCycleStartedAt: record?.usageCycleStartedAt || null,
+  usageResetAt: record?.usageResetAt || null,
   isExpired: isExpired(record),
   isRevoked: Boolean(record?.revokedAt),
   isActive: !record?.revokedAt && !isExpired(record),
 });
+
+const buildAvailableServicePolicies = () =>
+  Object.fromEntries(
+    ACCESS_TOKEN_SERVICE_FLAG_LIST.map((serviceKey) => [
+      serviceKey,
+      getTokenPolicyPresetNames(serviceKey),
+    ]),
+  );
 
 export const parseTokenTtl = (rawTtl) => {
   const ttlSeconds = parseOptionalTtl(rawTtl, 'ttl');
@@ -320,6 +444,7 @@ export const createSuperAdminToken = ({ alias, ttlSeconds }) => {
     tokenType: TOKEN_TYPES.SUPERADMIN,
     alias: normalizedAlias,
     serviceFlags: [],
+    servicePolicies: {},
     ttlSeconds,
     tokenHash: hashToken(token),
     createdAt,
@@ -331,6 +456,8 @@ export const createSuperAdminToken = ({ alias, ttlSeconds }) => {
     renewedByTokenId: null,
     extendedAt: null,
     extendedByTokenId: null,
+    usageCycleStartedAt: null,
+    usageResetAt: null,
   });
   saveStore(store);
 
@@ -344,9 +471,9 @@ export const createSuperAdminToken = ({ alias, ttlSeconds }) => {
   };
 };
 
-export const createAccessToken = ({ alias, serviceFlags, ttlSeconds, actorTokenId }) => {
+export const createAccessToken = ({ alias, servicePolicies, ttlSeconds, actorTokenId }) => {
   const normalizedAlias = ensureAlias(alias);
-  const normalizedFlags = normalizeServiceFlags(serviceFlags);
+  const normalizedPolicies = normalizeServicePolicies(servicePolicies);
   validateTtlSeconds(ttlSeconds);
 
   const tokenId = randomUUID();
@@ -359,7 +486,8 @@ export const createAccessToken = ({ alias, serviceFlags, ttlSeconds, actorTokenI
     tokenId,
     tokenType: TOKEN_TYPES.ACCESS,
     alias: normalizedAlias,
-    serviceFlags: normalizedFlags,
+    serviceFlags: deriveServiceFlagsFromPolicies(normalizedPolicies),
+    servicePolicies: normalizedPolicies,
     ttlSeconds,
     tokenHash: hashToken(token),
     createdAt,
@@ -371,6 +499,8 @@ export const createAccessToken = ({ alias, serviceFlags, ttlSeconds, actorTokenI
     renewedByTokenId: actorTokenId || null,
     extendedAt: null,
     extendedByTokenId: null,
+    usageCycleStartedAt: createdAt,
+    usageResetAt: null,
   };
   store.tokens.push(record);
   saveStore(store);
@@ -381,9 +511,9 @@ export const createAccessToken = ({ alias, serviceFlags, ttlSeconds, actorTokenI
   };
 };
 
-export const updateAccessToken = ({ tokenId, alias, serviceFlags }) => {
+export const updateAccessToken = ({ tokenId, alias, servicePolicies }) => {
   const normalizedAlias = ensureAlias(alias);
-  const normalizedFlags = normalizeServiceFlags(serviceFlags);
+  const normalizedPolicies = normalizeServicePolicies(servicePolicies);
   const store = readStore();
 
   const nextTokens = store.tokens.map((record) => {
@@ -395,7 +525,8 @@ export const updateAccessToken = ({ tokenId, alias, serviceFlags }) => {
     return {
       ...record,
       alias: normalizedAlias,
-      serviceFlags: normalizedFlags,
+      servicePolicies: normalizedPolicies,
+      serviceFlags: deriveServiceFlagsFromPolicies(normalizedPolicies),
     };
   });
 
@@ -431,7 +562,12 @@ export const revokeAccessToken = ({ tokenId, actorTokenId }) => {
   return toPublicTokenRecord(findTokenRecordOrThrow(store, tokenId));
 };
 
-export const renewAccessToken = ({ tokenId, actorTokenId, ttlSeconds = null }) => {
+export const renewAccessToken = ({
+  tokenId,
+  actorTokenId,
+  ttlSeconds = null,
+  servicePolicies = undefined,
+}) => {
   const store = readStore();
   const target = findTokenRecordOrThrow(store, tokenId);
   assertAccessTokenRecord(target);
@@ -454,6 +590,10 @@ export const renewAccessToken = ({ tokenId, actorTokenId, ttlSeconds = null }) =
       ? storedTtlSeconds
       : 30 * 24 * 60 * 60);
   validateTtlSeconds(nextTtlSeconds);
+  const normalizedPolicies =
+    servicePolicies === undefined
+      ? target.servicePolicies
+      : normalizeServicePolicies(servicePolicies);
 
   const token = buildPlainToken();
   const renewedAt = new Date().toISOString();
@@ -463,6 +603,8 @@ export const renewAccessToken = ({ tokenId, actorTokenId, ttlSeconds = null }) =
     String(record?.tokenId || '') === String(tokenId || '').trim()
       ? {
           ...record,
+          servicePolicies: normalizedPolicies,
+          serviceFlags: deriveServiceFlagsFromPolicies(normalizedPolicies),
           tokenHash: hashToken(token),
           ttlSeconds: nextTtlSeconds,
           expiresAt,
@@ -471,6 +613,8 @@ export const renewAccessToken = ({ tokenId, actorTokenId, ttlSeconds = null }) =
           revokedByTokenId: null,
           renewedAt,
           renewedByTokenId: actorTokenId || null,
+          usageCycleStartedAt: renewedAt,
+          usageResetAt: null,
         }
       : record,
   );
@@ -522,6 +666,29 @@ export const extendAccessToken = ({ tokenId, ttlSeconds, actorTokenId }) => {
   return toPublicTokenRecord(findTokenRecordOrThrow(store, tokenId));
 };
 
+/*
+ * Superadmins can zero the active quota counters without deleting audit
+ * history, so plan math recomputes usage from the reset timestamp onward.
+ */
+export const resetAccessTokenUsage = ({ tokenId }) => {
+  const store = readStore();
+  const target = findTokenRecordOrThrow(store, tokenId);
+  assertAccessTokenRecord(target);
+
+  const usageResetAt = new Date().toISOString();
+  store.tokens = store.tokens.map((record) =>
+    String(record?.tokenId || '') === String(tokenId || '').trim()
+      ? {
+          ...record,
+          usageResetAt,
+        }
+      : record,
+  );
+  saveStore(store);
+
+  return toPublicTokenRecord(findTokenRecordOrThrow(store, tokenId));
+};
+
 export const listAccessTokens = () => {
   const store = readStore();
   const tokens = store.tokens
@@ -537,7 +704,15 @@ export const listAccessTokens = () => {
     count: tokens.length,
     tokens,
     availableServiceFlags: ACCESS_TOKEN_SERVICE_FLAG_LIST,
+    availableServicePolicies: buildAvailableServicePolicies(),
   };
+};
+
+export const getAccessTokenRecordById = (tokenId) => {
+  const store = readStore();
+  const record = findTokenRecordOrThrow(store, tokenId);
+  assertAccessTokenRecord(record);
+  return record;
 };
 
 export const resolveStoredToken = (plainToken) => {
