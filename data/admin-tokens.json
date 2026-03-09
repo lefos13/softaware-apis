@@ -193,15 +193,55 @@
       "tokenHash": "49ef646e1064d336504ecc10e01ccc60671142190e4c9c7bd8aa486bad4f0ef3",
       "createdAt": "2026-03-09T22:09:25.396Z",
       "expiresAt": "2026-05-08T22:09:25.396Z",
-      "revokedAt": null,
-      "revocationReason": null,
-      "revokedByTokenId": null,
+      "revokedAt": "2026-03-09T23:01:51.704Z",
+      "revocationReason": "superadmin_revoke_selected",
+      "revokedByTokenId": "0be8a7c9-0008-4ffd-968f-1b192b0bb845",
       "renewedAt": null,
       "renewedByTokenId": "0be8a7c9-0008-4ffd-968f-1b192b0bb845",
       "extendedAt": "2026-03-09T22:42:18.781Z",
       "extendedByTokenId": "0be8a7c9-0008-4ffd-968f-1b192b0bb845",
       "usageCycleStartedAt": "2026-03-09T22:09:25.396Z",
       "usageResetAt": "2026-03-09T22:54:29.392Z"
+    },
+    {
+      "tokenId": "cd3ad240-90d6-47f0-a13a-87eba14565cc",
+      "tokenType": "access",
+      "alias": "new token",
+      "serviceFlags": ["books_greek_editor", "pdf", "image", "tasks"],
+      "servicePolicies": {
+        "books_greek_editor": {
+          "preset": "300000_words",
+          "kind": "words_total",
+          "wordsTotal": 300000
+        },
+        "image": {
+          "preset": "20_per_day",
+          "kind": "requests_per_day",
+          "requestsPerDay": 20
+        },
+        "pdf": {
+          "preset": "30_per_day",
+          "kind": "requests_per_day",
+          "requestsPerDay": 30
+        },
+        "tasks": {
+          "preset": "unlimited",
+          "kind": "unlimited"
+        }
+      },
+      "ttlSeconds": 2592000,
+      "tokenHash": "cd505ca8e0488efbac51211b7e4b86dd61b2032ceee96a01da8d3fb4d1f46126",
+      "createdAt": "2026-03-09T23:02:11.464Z",
+      "expiresAt": "2026-04-08T23:02:11.465Z",
+      "revokedAt": null,
+      "revocationReason": null,
+      "revokedByTokenId": null,
+      "renewedAt": null,
+      "renewedByTokenId": "0be8a7c9-0008-4ffd-968f-1b192b0bb845",
+      "extendedAt": null,
+      "extendedByTokenId": null,
+      "usageCycleStartedAt": "2026-03-09T23:02:11.464Z",
+      "usageResetAt": null
     }
   ]
 }

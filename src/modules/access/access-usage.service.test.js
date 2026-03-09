@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import {
   assertServiceQuota,
   buildPlanServicesSummary,
+  listUsageHistory,
   recordUsageEvent,
   resolveExistingUsageCharge,
 } from './access-usage.service.js';
@@ -120,4 +121,49 @@ test('usageResetAt zeros current counters without deleting history', () => {
   assert.equal(summary.quota.words.used, 0);
   assert.equal(summary.quota.words.remaining, 300000);
   assert.equal(summary.quota.words.resetAt, resetAt);
+});
+
+/*
+ * Dashboard history should surface billable actions only, while still allowing
+ * explicit sorting and pagination metadata for table-driven frontends.
+ */
+test('listUsageHistory excludes non-usage operations and returns normalized sorting metadata', () => {
+  const actorKey = `test-history-actor-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const serviceKey = 'tasks';
+
+  recordUsageEvent({
+    actorType: ACCESS_PLAN_TYPES.TOKEN,
+    actorKey,
+    serviceKey,
+    operationName: 'task_progress_lookup',
+    planType: ACCESS_PLAN_TYPES.TOKEN,
+    status: 'success',
+    consumedRequests: 0,
+    consumedWords: 0,
+  });
+
+  recordUsageEvent({
+    actorType: ACCESS_PLAN_TYPES.TOKEN,
+    actorKey,
+    serviceKey: 'pdf',
+    operationName: 'pdf_merge',
+    planType: ACCESS_PLAN_TYPES.TOKEN,
+    status: 'success',
+    consumedRequests: 1,
+    consumedWords: 0,
+  });
+
+  const history = listUsageHistory({
+    actorKey,
+    sortBy: 'operationName',
+    sortDirection: 'asc',
+    page: 1,
+    limit: 20,
+  });
+
+  assert.equal(history.sortBy, 'operationName');
+  assert.equal(history.sortDirection, 'asc');
+  assert.equal(history.total, 1);
+  assert.equal(history.items.length, 1);
+  assert.equal(history.items[0].operationName, 'pdf_merge');
 });

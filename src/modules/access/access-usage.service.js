@@ -174,9 +174,63 @@ const usageSummaryStatements = {
     WHERE actor_key = @actorKey
       AND (@serviceKey = '' OR service_key = @serviceKey)
       AND (@status = '' OR status = @status)
+      AND operation_name NOT IN ('task_progress_lookup', 'health_check', 'health_status')
+      AND operation_name NOT LIKE 'health%'
       AND created_at >= @startAt
   `),
-  historyPage: db.prepare(`
+  billingLookup: db.prepare(`
+    SELECT
+      consumed_requests AS consumedRequests,
+      consumed_words AS consumedWords
+    FROM usage_events
+    WHERE actor_key = @actorKey
+      AND service_key = @serviceKey
+      AND billing_key = @billingKey
+      AND status = 'success'
+    ORDER BY created_at ASC, event_id ASC
+    LIMIT 1
+  `),
+};
+
+/*
+ * Dashboard history should represent billable or user-triggered usage events,
+ * so service health polling and task status lookups are excluded from owner
+ * activity regardless of caller filters.
+ */
+const DASHBOARD_HISTORY_EXCLUDED_OPERATION_CLAUSE = `
+  operation_name NOT IN ('task_progress_lookup', 'health_check', 'health_status')
+  AND operation_name NOT LIKE 'health%'
+`;
+
+const HISTORY_SORT_COLUMN_MAP = {
+  createdAt: 'created_at',
+  operationName: 'operation_name',
+  serviceKey: 'service_key',
+  status: 'status',
+  consumedRequests: 'consumed_requests',
+  consumedWords: 'consumed_words',
+};
+
+const historyPageStatementCache = new Map();
+
+const resolveHistorySort = (sortBy = 'createdAt', sortDirection = 'desc') => {
+  const column = HISTORY_SORT_COLUMN_MAP[sortBy] || HISTORY_SORT_COLUMN_MAP.createdAt;
+  const direction = String(sortDirection).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  return {
+    sortBy: Object.keys(HISTORY_SORT_COLUMN_MAP).find(
+      (key) => HISTORY_SORT_COLUMN_MAP[key] === column,
+    ),
+    sortDirection: direction === 'ASC' ? 'asc' : 'desc',
+    orderClause: `${column} ${direction}, event_id ${direction}`,
+  };
+};
+
+const getHistoryPageStatement = (orderClause) => {
+  if (historyPageStatementCache.has(orderClause)) {
+    return historyPageStatementCache.get(orderClause);
+  }
+
+  const statement = db.prepare(`
     SELECT
       event_id AS eventId,
       created_at AS createdAt,
@@ -195,22 +249,13 @@ const usageSummaryStatements = {
     WHERE actor_key = @actorKey
       AND (@serviceKey = '' OR service_key = @serviceKey)
       AND (@status = '' OR status = @status)
+      AND ${DASHBOARD_HISTORY_EXCLUDED_OPERATION_CLAUSE}
       AND created_at >= @startAt
-    ORDER BY created_at DESC, event_id DESC
+    ORDER BY ${orderClause}
     LIMIT @limit OFFSET @offset
-  `),
-  billingLookup: db.prepare(`
-    SELECT
-      consumed_requests AS consumedRequests,
-      consumed_words AS consumedWords
-    FROM usage_events
-    WHERE actor_key = @actorKey
-      AND service_key = @serviceKey
-      AND billing_key = @billingKey
-      AND status = 'success'
-    ORDER BY created_at ASC, event_id ASC
-    LIMIT 1
-  `),
+  `);
+  historyPageStatementCache.set(orderClause, statement);
+  return statement;
 };
 
 const parseJsonObject = (value) => {
@@ -539,11 +584,15 @@ export const listUsageHistory = ({
   actorKey,
   serviceKey = '',
   status = '',
+  sortBy = 'createdAt',
+  sortDirection = 'desc',
   page = 1,
   limit = 20,
 }) => {
   const normalizedPage = Math.max(1, Number(page) || 1);
   const normalizedLimit = Math.min(100, Math.max(1, Number(limit) || 20));
+  const normalizedSort = resolveHistorySort(sortBy, sortDirection);
+  const historyPageStatement = getHistoryPageStatement(normalizedSort.orderClause);
   const startAt = resolveRetentionCutoff();
   const total = Number(
     usageSummaryStatements.historyCount.get({
@@ -553,7 +602,7 @@ export const listUsageHistory = ({
       startAt,
     })?.total || 0,
   );
-  const rows = usageSummaryStatements.historyPage.all({
+  const rows = historyPageStatement.all({
     actorKey,
     serviceKey,
     status,
@@ -565,6 +614,8 @@ export const listUsageHistory = ({
   return {
     page: normalizedPage,
     limit: normalizedLimit,
+    sortBy: normalizedSort.sortBy,
+    sortDirection: normalizedSort.sortDirection,
     count: rows.length,
     total,
     items: rows.map((row) => ({

@@ -22,6 +22,31 @@ const parsePage = (value, fallback) => {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 };
 
+/*
+ * Dashboard history sorting is constrained to known fields so pagination stays
+ * stable and raw query input never reaches SQL order clauses.
+ */
+const DASHBOARD_HISTORY_SORT_KEYS = new Set([
+  'createdAt',
+  'operationName',
+  'serviceKey',
+  'status',
+  'consumedRequests',
+  'consumedWords',
+]);
+
+const parseHistorySortBy = (value) => {
+  const normalized = String(value || '').trim();
+  return DASHBOARD_HISTORY_SORT_KEYS.has(normalized) ? normalized : 'createdAt';
+};
+
+const parseHistorySortDirection = (value) =>
+  String(value || '')
+    .trim()
+    .toLowerCase() === 'asc'
+    ? 'asc'
+    : 'desc';
+
 const buildPlanPayload = (caller) => {
   const services = buildPlanServicesSummary({
     actorKey: caller.actorKey,
@@ -65,11 +90,15 @@ accessRouter.get('/dashboard', requireTokenDashboardAccess, (req, res, next) => 
     const limit = Math.min(100, parsePage(req.query.limit, 20));
     const serviceKey = String(req.query.serviceKey || '').trim();
     const status = String(req.query.status || '').trim();
+    const sortBy = parseHistorySortBy(req.query.sortBy);
+    const sortDirection = parseHistorySortDirection(req.query.sortDirection);
     const planPayload = buildPlanPayload(caller);
     const history = listUsageHistory({
       actorKey: caller.actorKey,
       serviceKey,
       status,
+      sortBy,
+      sortDirection,
       page,
       limit,
     });

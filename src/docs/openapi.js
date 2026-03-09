@@ -106,7 +106,7 @@ export function buildOpenApiSpec() {
           tags: ['Access'],
           summary: 'Fetch the token owner dashboard payload',
           description:
-            'Returns the authenticated token summary, per-service remaining usage, and paginated action history for the calling access token.',
+            'Returns the authenticated token summary, per-service remaining usage, and paginated/sortable usage history for the calling access token. Health checks and task progress lookups are excluded from history.',
           operationId: 'getAccessDashboard',
           parameters: [
             {
@@ -139,6 +139,29 @@ export function buildOpenApiSpec() {
               in: 'query',
               required: false,
               schema: { type: 'string', enum: ['success', 'failed'] },
+            },
+            {
+              name: 'sortBy',
+              in: 'query',
+              required: false,
+              schema: {
+                type: 'string',
+                enum: [
+                  'createdAt',
+                  'operationName',
+                  'serviceKey',
+                  'status',
+                  'consumedRequests',
+                  'consumedWords',
+                ],
+                default: 'createdAt',
+              },
+            },
+            {
+              name: 'sortDirection',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', enum: ['asc', 'desc'], default: 'desc' },
             },
           ],
           responses: {
@@ -3465,6 +3488,19 @@ export function buildOpenApiSpec() {
           properties: {
             page: { type: 'integer', minimum: 1, example: 1 },
             limit: { type: 'integer', minimum: 1, example: 20 },
+            sortBy: {
+              type: 'string',
+              enum: [
+                'createdAt',
+                'operationName',
+                'serviceKey',
+                'status',
+                'consumedRequests',
+                'consumedWords',
+              ],
+              example: 'createdAt',
+            },
+            sortDirection: { type: 'string', enum: ['asc', 'desc'], example: 'desc' },
             count: { type: 'integer', minimum: 0, example: 20 },
             total: { type: 'integer', minimum: 0, example: 120 },
             items: {
@@ -3472,7 +3508,7 @@ export function buildOpenApiSpec() {
               items: { $ref: '#/components/schemas/AccessHistoryItem' },
             },
           },
-          required: ['page', 'limit', 'count', 'total', 'items'],
+          required: ['page', 'limit', 'sortBy', 'sortDirection', 'count', 'total', 'items'],
         },
         AccessPlanPayload: {
           type: 'object',
