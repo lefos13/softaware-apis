@@ -104,7 +104,7 @@ test('γι αυτό phrase variants normalize to "γι’ αυτό"', () => {
 
 test('new literary phrase rules normalize before-phrases, quote punctuation, syntax phrases, and fixed contractions', () => {
   const result = applyRules(
-    'Πριν το μάθημα είπε: «Γύρισα», και «γύρνα,» . Θα φύγω πριν δεκαπέντε χρόνια και πριν τις δέκα το βράδυ. Ήταν πριν πολύ καιρό, πριν τέσσερις δεκαετίες, πριν κάτι μήνες, πριν πολλά πολλά χρόνια, πριν λίγες μέρες και πριν σχεδόν μισό αιώνα. ανάμεσα στην πόλη και την θάλασσα, ανάμεσα σε φίλους και τους γείτονες, ανάμεσα σε τη θάλασσα και τις πέτρες στο είπα δόξα τον Θεό που και που έρχομαι και φεύγω όταν θέλω',
+    'Πριν το μάθημα είπε: «Γύρισα», και «γύρνα,» . Θα φύγω πριν δεκαπέντε χρόνια και πριν τις δέκα το βράδυ. Ήταν πριν πολύ καιρό, πριν τέσσερις δεκαετίες, πριν κάτι μήνες, πριν πολλά πολλά χρόνια, πριν λίγες μέρες και πριν σχεδόν μισό αιώνα. ανάμεσα στην πόλη και την θάλασσα, ανάμεσα σε φίλους και τους γείτονες, ανάμεσα σε τη θάλασσα και τις πέτρες στο είπα δόξα τον Θεό που και που έρχομαι και φεύγω όταν θέλω για να προλάβω το τελευταίο λεωφορείο απόψε',
     [
       'prin_before_time_phrase',
       'quote_comma_trim',
@@ -117,7 +117,7 @@ test('new literary phrase rules normalize before-phrases, quote punctuation, syn
 
   assert.equal(
     result.text,
-    "Πριν από το μάθημα είπε: «Γύρισα» και «γύρνα» . Θα φύγω πριν από δεκαπέντε χρόνια και πριν από τις δέκα το βράδυ. Ήταν πριν από πολύ καιρό, πριν από τέσσερις δεκαετίες, πριν από κάτι μήνες, πριν από πολλά πολλά χρόνια, πριν από λίγες μέρες και πριν από σχεδόν μισό αιώνα. ανάμεσα στην πόλη και στην θάλασσα, ανάμεσα σε φίλους και στους γείτονες, ανάμεσα σε τη θάλασσα και στις πέτρες σ' το είπα δόξα τω Θεώ που και που έρχομαι και φεύγω όταν θέλω",
+    "Πριν από το μάθημα είπε: «Γύρισα» και «γύρνα» . Θα φύγω πριν από δεκαπέντε χρόνια και πριν από τις δέκα το βράδυ. Ήταν πριν από πολύ καιρό, πριν από τέσσερις δεκαετίες, πριν από κάτι μήνες, πριν από πολλά πολλά χρόνια, πριν από λίγες μέρες και πριν από σχεδόν μισό αιώνα. ανάμεσα στην πόλη και στην θάλασσα, ανάμεσα σε φίλους και στους γείτονες, ανάμεσα σε τη θάλασσα και στις πέτρες σ' το είπα δόξα τω Θεώ που και που έρχομαι και φεύγω όταν θέλω, για να προλάβω το τελευταίο λεωφορείο απόψε",
   );
 });
 
@@ -143,6 +143,52 @@ test('question opening words, repeated phrase toning, and quote-period preferenc
   );
 
   assert.equal(result.text, 'Πού πήγες; πώς και πώς σε περίμενα. Το δωμάτιο μου είπε «γύρνα.»');
+});
+
+/*
+ * This keeps the interrogative toning rule strict enough to skip explanatory,
+ * elliptical, and multi-clause openings that happen to end with a Greek
+ * question mark but do not use sentence-initial "που" as a plain direct
+ * question adverb.
+ */
+test('question opening toning skips non-direct-question openings', () => {
+  const result = applyRules(
+    'Που βρίσκουν νερό παρόλο που είμαστε ψηλά σε αυτόν τον λόφο; Που να μας πάρει και να μας σηκώσει, τι στο καλό κάνουμε εδώ πέρα; «Που να σε καταπιούν τα κύματα, τι γκαρίζεις; Που μου έλεγες πως έρχονταν στην Αιώνια Φλόγα και πως έπρεπε να τους εμποδίσουμε, για να μην περάσουν στη Ζουγκλίμνια Πεδιάδα; Που όταν με αντίκρισες θέλησες να με κάνεις δούλα των πολεμιστών σου; Πως γίνεται αυτό;',
+    ['question_pou_pos_toning'],
+  );
+
+  assert.equal(
+    result.text,
+    'Πού βρίσκουν νερό παρόλο που είμαστε ψηλά σε αυτόν τον λόφο; Που να μας πάρει και να μας σηκώσει, τι στο καλό κάνουμε εδώ πέρα; «Που να σε καταπιούν τα κύματα, τι γκαρίζεις; Που μου έλεγες πως έρχονταν στην Αιώνια Φλόγα και πως έπρεπε να τους εμποδίσουμε, για να μην περάσουν στη Ζουγκλίμνια Πεδιάδα; Που όταν με αντίκρισες θέλησες να με κάνεις δούλα των πολεμιστών σου; Πώς γίνεται αυτό;',
+  );
+});
+
+/*
+ * These cases lock the new genitive-only grammar heuristics so the fixed
+ * prepositional forms are corrected without touching nearby nominal uses.
+ */
+test('genitive phrase rules normalize λόγω and βάσει only in conservative contexts', () => {
+  const result = applyRules(
+    'Λόγο της βροχής έφυγα. Άργησε, λογο των έργων, να φτάσει. Με βάση των στοιχείων αποφασίστηκε. Βάση του νόμου ισχύει.',
+    ['logo_genitive_normalize', 'vasei_genitive_normalize'],
+  );
+
+  assert.equal(
+    result.text,
+    'Λόγω της βροχής έφυγα. Άργησε, λόγω των έργων, να φτάσει. Βάσει των στοιχείων αποφασίστηκε. Βάσει του νόμου ισχύει.',
+  );
+});
+
+test('genitive phrase rules skip noun uses of λόγος and βάση', () => {
+  const result = applyRules(
+    'ο λόγος της απόφασης μετράει. Τον λόγο της μάνας του δεν τον ξέχασε. Η βάση του αγάλματος ράγισε. Στη βάση της σελίδας υπάρχει σημείωση. Με βάση τα στοιχεία προχωράμε. Με βάση αυτό το δεδομένο συνεχίζουμε.',
+    ['logo_genitive_normalize', 'vasei_genitive_normalize'],
+  );
+
+  assert.equal(
+    result.text,
+    'ο λόγος της απόφασης μετράει. Τον λόγο της μάνας του δεν τον ξέχασε. Η βάση του αγάλματος ράγισε. Στη βάση της σελίδας υπάρχει σημείωση. Με βάση τα στοιχεία προχωράμε. Με βάση αυτό το δεδομένο συνεχίζουμε.',
+  );
 });
 
 /*
@@ -173,28 +219,34 @@ test('comma-before-subordinators only changes standalone words and not word frag
   assert.equal(result.text, 'Ο Γκέχαρντ Μίλερ ήταν χαρούμενος αλλά έφυγε όταν νύχτωσε.');
 });
 
-test('comma-before-subordinators skips excluded terms, short prefixes, and και/κι prefixes', () => {
+test('comma-before-subordinators only affects "για να" and skips other links', () => {
   const result = applyRules(
-    'Θα φύγω μέχρι νυχτώσει. Είπε αν θέλεις. Ρώτησε εάν προλαβαίνεις. Έφυγα όταν νύχτωσε. Γύρισα και όταν έφτασε σώπασα. Μίλησα κι όταν έμαθα περισσότερα.',
+    'Θα κάτσω λίγο για να τελειώσω τη δύσκολη αναφορά σήμερα. Μίλησα γιατί το ήθελα. Έφυγα επειδή νύχτωσε. Ρώτησε διότι άργησα.',
     ['comma_before_subordinators'],
   );
 
   assert.equal(
     result.text,
-    'Θα φύγω μέχρι νυχτώσει. Είπε αν θέλεις. Ρώτησε εάν προλαβαίνεις. Έφυγα όταν νύχτωσε. Γύρισα και όταν έφτασε σώπασα. Μίλησα κι όταν έμαθα περισσότερα.',
+    'Θα κάτσω λίγο, για να τελειώσω τη δύσκολη αναφορά σήμερα. Μίλησα γιατί το ήθελα. Έφυγα επειδή νύχτωσε. Ρώτησε διότι άργησα.',
   );
 });
 
-test('comma-before-subordinators skips clauses with three or fewer following words', () => {
-  const result = applyRules(
-    'Γύρισα αργά όταν νύχτωσε πολύ. Μίλησα ήρεμα γιατί το ήθελα πραγματικά.',
-    ['comma_before_subordinators'],
-  );
+test('comma-before-subordinators skips short "για να" clauses', () => {
+  const result = applyRules('Έτρεξα γρήγορα για να σωθώ.', ['comma_before_subordinators']);
 
-  assert.equal(
-    result.text,
-    'Γύρισα αργά όταν νύχτωσε πολύ. Μίλησα ήρεμα γιατί το ήθελα πραγματικά.',
-  );
+  assert.equal(result.text, 'Έτρεξα γρήγορα για να σωθώ.');
+});
+
+/*
+ * The "ανάμεσα ... και ..." contraction must preserve the leading case pattern
+ * of the source sentence while only rewriting the second article family.
+ */
+test('anamesa article contraction preserves sentence-initial capitalization', () => {
+  const result = applyRules('Ανάμεσα στον Ραθ και τον Δημιουργό συγκεκριμένα.', [
+    'anamesa_article_contract',
+  ]);
+
+  assert.equal(result.text, 'Ανάμεσα στον Ραθ και στον Δημιουργό συγκεκριμένα.');
 });
 
 test('comma-before-subordinators does not check "άμα" anymore', () => {
@@ -229,6 +281,14 @@ test('min negation rule keeps the fixed phrase "μη αλκοολούχα"', () 
   const result = applyRules('μη αλκοολούχα ποτά και μη αλκοολούχα μπύρα', ['min_negation_trim']);
 
   assert.equal(result.text, 'μη αλκοολούχα ποτά και μη αλκοολούχα μπύρα');
+});
+
+test('min negation rule keeps the fixed phrase "αν μη τι άλλο"', () => {
+  const result = applyRules('αν μη τι άλλο θα φύγω, κι αν μην τι άλλο θα γυρίσω', [
+    'min_negation_trim',
+  ]);
+
+  assert.equal(result.text, 'αν μη τι άλλο θα φύγω, κι αν μη τι άλλο θα γυρίσω');
 });
 
 test('orthography family rules normalize βρομιά, αντικρίζω, and κλοτσώ families', () => {
@@ -364,13 +424,13 @@ test('orthography family rules normalize αντεπεξέρχομαι and απα
   assert.equal(result.text, 'αντεπεξέρχομαι αντεπεξήλθα απαθανατίζω απαθανατίστηκε');
 });
 
-test('orthography family rules normalize νοιώθω and δέχτηκα families', () => {
-  const result = applyRules('Νιώθω νιώσαμε δέχθηκα παραδέχθηκες αποδέχθηκαν', [
+test('orthography family rules normalize νιώθω and δέχτηκα families', () => {
+  const result = applyRules('Νοιώθω νοιώσαμε δέχθηκα παραδέχθηκες αποδέχθηκαν', [
     'niotho_family_normalize',
     'dechtika_family_normalize',
   ]);
 
-  assert.equal(result.text, 'Νοιώθω νοιώσαμε δέχτηκα παραδέχτηκες απόδεχτηκαν');
+  assert.equal(result.text, 'Νιώθω νιώσαμε δέχτηκα παραδέχτηκες απόδεχτηκαν');
 });
 
 test('orthography family rules normalize the χαιρέτησα family', () => {

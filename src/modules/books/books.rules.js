@@ -24,6 +24,8 @@ const OPENING_PUNCTUATION = new Set([
   '[',
   '{',
 ]);
+const GENITIVE_ARTICLES = new Set(['της', 'του', 'των']);
+const SAFE_PREPOSITION_BOUNDARY_CHARS = new Set([',', ':', '-', '–', '—', '(', '[', '{']);
 const TRIMMING_CONSONANTS = new Set(['β', 'γ', 'δ', 'ζ', 'θ', 'λ', 'μ', 'ν', 'ρ', 'σ', 'φ', 'χ']);
 const ANDRAS_STYLE_VALUES = new Set(['antras', 'andras']);
 const AVGO_STYLE_VALUES = new Set(['avgo', 'avgoBeta']);
@@ -46,7 +48,7 @@ const COLLOQUIAL_ENDINGS = [
 const SENTENCE_END_CHAR_REGEX = /[.!?;…\n]/;
 const COLLOQUIAL_PROGRESSIVE_EXCLUDED_STEMS = ['σπ', 'σκ'];
 const COLLOQUIAL_PROGRESSIVE_EXCLUDED_WORD_STEMS = new Set(['διεξηγ', 'παρηγ', 'αχορτ', 'απηγ']);
-const COMMA_SUBORDINATORS = ['για να', 'γιατί', 'επειδή', 'διότι'];
+const COMMA_SUBORDINATORS = ['για να'];
 const PRIN_BEFORE_FIXED_PHRASES = [
   ['το', 'μαθημα'],
   ['τη', 'δουλεια'],
@@ -89,6 +91,16 @@ const PRIN_BEFORE_DURATION_UNITS = new Set([
 ]);
 const PRIN_BEFORE_CLOCK_PERIODS = new Set(['βραδυ', 'πρωι', 'μεσημερι', 'απογευμα', 'νυχτα']);
 const PRIN_BEFORE_BARE_DURATION_UNITS = new Set(['χρονια', 'χρονων', 'μερες', 'μερων']);
+const QUESTION_POU_POS_DISALLOWED_OPENERS = new Set(['να']);
+const QUESTION_POU_POS_EARLY_SUBORDINATORS = new Set([
+  'που',
+  'πως',
+  'οταν',
+  'αν',
+  'αφου',
+  'επειδη',
+  'μηπως',
+]);
 const PRIN_BEFORE_QUANTITY_TOKENS = new Set([
   'μια',
   'μιας',
@@ -742,6 +754,44 @@ const readFollowingGreekLikeTokens = (text, startIndex, maxTokens = 6) => {
   return tokens;
 };
 
+/*
+ * These helpers keep the new "λόγω" and "βάσει" rules tied to the narrow
+ * genitive patterns that behave like inserted prepositional phrases instead of
+ * broad noun matching, so common nominal uses of "λόγος" and "βάση" stay safe.
+ */
+const isGreekToken = (token) => Boolean(token?.raw && isGreekLetter(token.raw[0]));
+
+const startsWithGenitiveArticlePhrase = (tokens) =>
+  GENITIVE_ARTICLES.has(tokens[0]?.normalized || '') && isGreekToken(tokens[1]);
+
+const hasSafePrepositionBoundary = (text, start) => {
+  if (isSentenceStart(text, start)) {
+    return true;
+  }
+
+  let cursor = start - 1;
+  while (cursor >= 0 && /\s/u.test(text[cursor])) {
+    cursor -= 1;
+  }
+
+  if (cursor < 0) {
+    return true;
+  }
+
+  return SAFE_PREPOSITION_BOUNDARY_CHARS.has(text[cursor]);
+};
+
+const isAnMiTiAlloPhrase = (text, start, end) => {
+  const previousWord = resolvePreviousGreekWord(text, start);
+  const tokens = readFollowingGreekLikeTokens(text, end, 3);
+
+  return (
+    normalizeGreekText(previousWord?.word || '') === 'αν' &&
+    tokens[0]?.normalized === 'τι' &&
+    tokens[1]?.normalized === 'αλλο'
+  );
+};
+
 const resolveSentenceBounds = (text, start, end) => {
   let sentenceStart = start;
   let sentenceEnd = end;
@@ -934,10 +984,14 @@ const shouldUseMinForm = (word) => {
 function buildMinNegationTrimEdits(text) {
   return collectRegexEdits(text, /μην|μη/giu, {
     boundary: 'word',
-    replacementResolver: (match, value, _start, end) => {
+    replacementResolver: (match, value, start, end) => {
       const nextWord = resolveNextGreekWord(value, end);
       if (!nextWord?.word) {
         return match[0];
+      }
+
+      if (isAnMiTiAlloPhrase(value, start, end)) {
+        return applyCasePattern(match[0], 'μη');
       }
 
       if (
@@ -1145,6 +1199,13 @@ function buildQuestionPouPosToningEdits(text) {
   const edits = [];
   const expression = /που|πως/giu;
 
+  /*
+   * The opening "πού/πώς" correction now stays conservative and only touches
+   * sentence-initial direct questions. Internal commas, imperative "να"
+   * openings, and early subordinate markers are treated as signals that the
+   * sentence is explanatory, elliptical, or multi-clause rather than a plain
+   * information-seeking question.
+   */
   for (const match of text.matchAll(expression)) {
     const source = match[0];
     const start = match.index;
@@ -1163,6 +1224,25 @@ function buildQuestionPouPosToningEdits(text) {
 
     const body = sentence.slice(source.length);
     if (/[.!…·:]/u.test(body)) {
+      continue;
+    }
+
+    if (body.includes(',')) {
+      continue;
+    }
+
+    const tokens = readFollowingGreekLikeTokens(sentence, source.length, 6);
+    if (tokens.length === 0) {
+      continue;
+    }
+
+    if (QUESTION_POU_POS_DISALLOWED_OPENERS.has(tokens[0].normalized)) {
+      continue;
+    }
+
+    if (
+      tokens.slice(0, 3).some((token) => QUESTION_POU_POS_EARLY_SUBORDINATORS.has(token.normalized))
+    ) {
       continue;
     }
 
@@ -1249,6 +1329,10 @@ function buildQuotePeriodPreferenceEdits(text, options) {
 }
 
 function buildCommaBeforeSubordinatorsEdits(text) {
+  /*
+   * This comma rule is now limited to the infinitive-purpose connector "για να"
+   * so causal and other subordinate links are left to manual editorial choice.
+   */
   const expression = new RegExp(
     `(${COMMA_SUBORDINATORS.map(escapeRegex)
       .sort((left, right) => right.length - left.length)
@@ -1333,7 +1417,7 @@ function buildAnamesaArticleContractEdits(text) {
     {
       boundary: 'word',
       replacementResolver: (match) =>
-        `ανάμεσα${match[1]}${match[2]}${match[3]}${match[4]}${match[5]}${applyCasePattern(
+        `${applyCasePattern(match[0].slice(0, 'ανάμεσα'.length), 'ανάμεσα')}${match[1]}${match[2]}${match[3]}${match[4]}${match[5]}${applyCasePattern(
           match[6],
           replacements[match[6].toLocaleLowerCase(GREEK_LOCALE)],
         )}${match[7]}${match[8]}`,
@@ -1347,7 +1431,7 @@ function buildAnamesaArticleContractEdits(text) {
       boundary: 'word',
       replacementResolver: (match) => {
         const optionalArticle = match[3] ? `${match[3]}${match[4]}` : '';
-        return `ανάμεσα${match[1]}σε${match[2]}${optionalArticle}${match[5]}${match[6]}${applyCasePattern(
+        return `${applyCasePattern(match[0].slice(0, 'ανάμεσα'.length), 'ανάμεσα')}${match[1]}σε${match[2]}${optionalArticle}${match[5]}${match[6]}${applyCasePattern(
           match[7],
           replacements[match[7].toLocaleLowerCase(GREEK_LOCALE)],
         )}${match[8]}${match[9]}`;
@@ -1358,6 +1442,41 @@ function buildAnamesaArticleContractEdits(text) {
   return [...compactPrepositionEdits, ...sePhraseEdits].sort(
     (left, right) => left.start - right.start,
   );
+}
+
+/*
+ * The genitive-only replacements target only the fixed prepositional readings
+ * of "λόγω" and "βάσει". They require a safe phrase boundary and a following
+ * genitive article phrase so noun uses such as "ο λόγος..." and "η βάση..."
+ * are not rewritten.
+ */
+function buildLogoGenitiveNormalizeEdits(text) {
+  return collectRegexEdits(text, /λόγο|λογο/giu, {
+    boundary: 'word',
+    shouldReplace: (_match, value, start, end) =>
+      hasSafePrepositionBoundary(value, start) &&
+      startsWithGenitiveArticlePhrase(readFollowingGreekLikeTokens(value, end, 3)),
+    replacementResolver: (match) => applyCasePattern(match[0], 'λόγω'),
+  });
+}
+
+function buildVaseiGenitiveNormalizeEdits(text) {
+  const standaloneEdits = collectRegexEdits(text, /βάση|βαση/giu, {
+    boundary: 'word',
+    shouldReplace: (_match, value, start, end) =>
+      hasSafePrepositionBoundary(value, start) &&
+      startsWithGenitiveArticlePhrase(readFollowingGreekLikeTokens(value, end, 3)),
+    replacementResolver: (match) => applyCasePattern(match[0], 'βάσει'),
+  });
+
+  const mePhraseEdits = collectRegexEdits(text, /με(\s+)βάση|με(\s+)βαση/giu, {
+    boundary: 'word',
+    shouldReplace: (_match, value, _start, end) =>
+      startsWithGenitiveArticlePhrase(readFollowingGreekLikeTokens(value, end, 3)),
+    replacementResolver: (match) => applyCasePattern(match[0], 'βάσει'),
+  });
+
+  return [...standaloneEdits, ...mePhraseEdits].sort((left, right) => left.start - right.start);
 }
 
 function buildStoToContractEdits(text) {
@@ -1521,11 +1640,15 @@ function buildNobilityTitlesLowercaseEdits(text) {
 }
 
 function buildNiothoFamilyEdits(text) {
+  /*
+   * The preferred modern spelling for this family is the compact "νιώθ-/νιώσ-"
+   * form, so older "νοιώθ-/νοιώσ-" variants are folded into that target.
+   */
   return buildPrefixFamilyEdits(text, [
-    ['νιώθ', 'νοιώθ'],
-    ['νιωθ', 'νοιωθ'],
-    ['νιώσ', 'νοιώσ'],
-    ['νιωσ', 'νοιωσ'],
+    ['νοιώθ', 'νιώθ'],
+    ['νοιωθ', 'νιωθ'],
+    ['νοιώσ', 'νιώσ'],
+    ['νοιωσ', 'νιωσ'],
   ]);
 }
 
@@ -1677,6 +1800,8 @@ export const BOOKS_RULE_REGISTRY = [
   { id: 'question_pou_pos_toning', apply: buildQuestionPouPosToningEdits },
   { id: 'quote_comma_trim', apply: buildQuoteCommaTrimEdits },
   { id: 'quote_period_preference', apply: buildQuotePeriodPreferenceEdits },
+  { id: 'logo_genitive_normalize', apply: buildLogoGenitiveNormalizeEdits },
+  { id: 'vasei_genitive_normalize', apply: buildVaseiGenitiveNormalizeEdits },
   {
     id: 'kyriarx_no_hyphen',
     apply: buildKyriarXNoHyphenEdits,

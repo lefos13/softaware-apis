@@ -5,3 +5,7 @@ coverage
 dist
 logs
 data/access-usage.sqlite
+# Keep runtime-generated sqlite state and local admin tokens out of version control.
+data/access-usage.sqlite-shm
+data/access-usage.sqlite-wal
+data/admin-tokens.json

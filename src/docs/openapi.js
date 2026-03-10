@@ -756,7 +756,7 @@ export function buildOpenApiSpec() {
                     editorOptions: {
                       type: 'string',
                       description:
-                        'JSON string. Example: {"ruleIds":["kai_before_vowel","den_negation_trim","giati_giati_normalize","quote_period_preference"],"includeReport":true,"preferences":{"andrasStyle":"antras","avgoStyle":"avgo","eptaStyle":"epta","oktoStyle":"okto","enniaStyle":"ennia","denNegationStyle":"contextual","quotePeriodStyle":"outside"}}.',
+                        'JSON string. Example: {"ruleIds":["logo_genitive_normalize","vasei_genitive_normalize","den_negation_trim","quote_period_preference"],"includeReport":true,"preferences":{"andrasStyle":"antras","avgoStyle":"avgo","eptaStyle":"epta","oktoStyle":"okto","enniaStyle":"ennia","denNegationStyle":"contextual","quotePeriodStyle":"outside"}}.',
                     },
                   },
                   required: ['files', 'editorOptions'],
@@ -913,6 +913,11 @@ export function buildOpenApiSpec() {
                           type: 'array',
                           items: { type: 'string' },
                           minItems: 1,
+                          example: [
+                            'logo_genitive_normalize',
+                            'vasei_genitive_normalize',
+                            'quote_period_preference',
+                          ],
                         },
                         includeReport: {
                           type: 'boolean',
@@ -1113,7 +1118,7 @@ export function buildOpenApiSpec() {
                     editorOptions: {
                       type: 'string',
                       description:
-                        'JSON string. Example: {"ruleIds":["den_negation_trim","giati_giati_normalize","quote_period_preference"],"includeReport":true,"preferences":{"andrasStyle":"antras","avgoStyle":"avgo","eptaStyle":"epta","oktoStyle":"okto","enniaStyle":"ennia","denNegationStyle":"contextual","quotePeriodStyle":"outside"}}.',
+                        'JSON string. Example: {"ruleIds":["logo_genitive_normalize","vasei_genitive_normalize","quote_period_preference"],"includeReport":true,"preferences":{"andrasStyle":"antras","avgoStyle":"avgo","eptaStyle":"epta","oktoStyle":"okto","enniaStyle":"ennia","denNegationStyle":"contextual","quotePeriodStyle":"outside"}}.',
                     },
                   },
                   required: ['files', 'editorOptions'],
