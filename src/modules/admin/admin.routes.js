@@ -7,7 +7,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { ApiError } from '../../common/utils/api-error.js';
 import { sendSuccess } from '../../common/utils/api-response.js';
-import { buildPlanServicesSummary } from '../access/access-usage.service.js';
+import { buildPlanServicesSummary, listUsageHistory } from '../access/access-usage.service.js';
 import { requireSuperAdminToken } from './admin-auth.middleware.js';
 import {
   createAccessToken,
@@ -24,6 +24,14 @@ import {
 const adminRouter = Router();
 const failureLogsDir = resolve(process.cwd(), 'logs', 'failures');
 const reportFilePattern = /^[A-Za-z0-9._-]+\.json$/;
+const TOKEN_HISTORY_SORT_KEYS = new Set([
+  'createdAt',
+  'operationName',
+  'serviceKey',
+  'status',
+  'consumedRequests',
+  'consumedWords',
+]);
 
 const parseLimit = (rawLimit) => {
   if (rawLimit === undefined) {
@@ -39,6 +47,27 @@ const parseLimit = (rawLimit) => {
 
   return parsed;
 };
+
+/*
+ * Token-history queries follow the owner dashboard rules so both admin and
+ * owner views page and sort the same usage data without separate semantics.
+ */
+const parsePage = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const parseHistorySortBy = (value) => {
+  const normalized = String(value || '').trim();
+  return TOKEN_HISTORY_SORT_KEYS.has(normalized) ? normalized : 'createdAt';
+};
+
+const parseHistorySortDirection = (value) =>
+  String(value || '')
+    .trim()
+    .toLowerCase() === 'asc'
+    ? 'asc'
+    : 'desc';
 
 const resolveSafeReportPath = (fileName) => {
   const normalized = basename(String(fileName || '').trim());
@@ -234,6 +263,34 @@ adminRouter.get('/tokens', (req, res, next) => {
         ...tokenData,
         tokens,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.get('/tokens/:tokenId/history', (req, res, next) => {
+  try {
+    const tokenRecord = getAccessTokenRecordById(req.params.tokenId);
+    const page = parsePage(req.query.page, 1);
+    const limit = Math.min(100, parsePage(req.query.limit, 20));
+    const serviceKey = String(req.query.serviceKey || '').trim();
+    const status = String(req.query.status || '').trim();
+    const sortBy = parseHistorySortBy(req.query.sortBy);
+    const sortDirection = parseHistorySortDirection(req.query.sortDirection);
+    const history = listUsageHistory({
+      actorKey: tokenRecord.tokenId,
+      serviceKey,
+      status,
+      sortBy,
+      sortDirection,
+      page,
+      limit,
+    });
+
+    sendSuccess(res, req, {
+      message: 'Access token history fetched successfully',
+      data: history,
     });
   } catch (error) {
     next(error);
