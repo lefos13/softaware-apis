@@ -476,6 +476,18 @@ test('reports include detailed change entries', () => {
   assert.equal(result.changes[0].sentenceAfter, 'Ορμούσε σαν λύκος.');
 });
 
+test('quote-period report tokens expand ellipsis tails for readability', () => {
+  const result = applyRules('Είπε «περίμενε...»', ['quote_period_preference'], {
+    preferences: { quotePeriodStyle: 'outside' },
+  });
+
+  assert.equal(result.changes.length, 1);
+  assert.equal(result.changes[0].before, '...»');
+  assert.equal(result.changes[0].after, '...».');
+  assert.equal(result.changes[0].sentenceBefore, 'Είπε «περίμενε...»');
+  assert.equal(result.changes[0].sentenceAfter, 'Είπε «περίμενε...».');
+});
+
 test('normalizeBooksEditorOptions validates supported preferences', () => {
   assert.throws(
     () =>

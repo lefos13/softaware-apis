@@ -691,6 +691,19 @@ const normalizeGreekText = (value) =>
     .join('')
     .toLocaleLowerCase(GREEK_LOCALE);
 
+const isSentenceBoundaryIndex = (text, index) => {
+  const char = text[index];
+  if (!char) {
+    return false;
+  }
+
+  if (char === '.') {
+    return text[index - 1] !== '.' && text[index + 1] !== '.';
+  }
+
+  return SENTENCE_END_CHAR_REGEX.test(char);
+};
+
 const isSentenceStart = (text, index) => {
   let cursor = index - 1;
 
@@ -796,11 +809,11 @@ const resolveSentenceBounds = (text, start, end) => {
   let sentenceStart = start;
   let sentenceEnd = end;
 
-  while (sentenceStart > 0 && !SENTENCE_END_CHAR_REGEX.test(text[sentenceStart - 1])) {
+  while (sentenceStart > 0 && !isSentenceBoundaryIndex(text, sentenceStart - 1)) {
     sentenceStart -= 1;
   }
 
-  while (sentenceEnd < text.length && !SENTENCE_END_CHAR_REGEX.test(text[sentenceEnd])) {
+  while (sentenceEnd < text.length && !isSentenceBoundaryIndex(text, sentenceEnd)) {
     sentenceEnd += 1;
   }
 
@@ -846,6 +859,32 @@ const buildPreview = (text, start, end, replacement) => {
   };
 };
 
+/*
+ * Quote-period changes can target only the final ".»" tail of a longer
+ * punctuation cluster such as "...»". The report expands those tokens so the
+ * user sees the full visible punctuation sequence instead of an isolated tail.
+ */
+const buildChangeDisplayTokens = (text, edit, ruleId) => {
+  let displayStart = edit.start;
+  const displayEnd = edit.end;
+  let displayReplacement = edit.replacement;
+
+  if (ruleId === 'quote_period_preference') {
+    while (displayStart > 0 && text[displayStart - 1] === '.') {
+      displayStart -= 1;
+    }
+
+    if (displayStart < edit.start) {
+      displayReplacement = `${text.slice(displayStart, edit.start)}${edit.replacement}`;
+    }
+  }
+
+  return {
+    before: text.slice(displayStart, displayEnd),
+    after: displayReplacement,
+  };
+};
+
 const applyEdits = (text, sourceMap, edits, ruleId, context = {}) => {
   if (!Array.isArray(edits) || edits.length === 0) {
     return {
@@ -871,6 +910,7 @@ const applyEdits = (text, sourceMap, edits, ruleId, context = {}) => {
       sourceMap[sourceMap.length - 1] ??
       0;
     const preview = buildPreview(text, edit.start, edit.end, edit.replacement);
+    const displayTokens = buildChangeDisplayTokens(text, edit, ruleId);
     const { sentenceStart, sentenceEnd } = resolveSentenceBounds(text, edit.start, edit.end);
     const sentenceBefore = text.slice(sentenceStart, sentenceEnd).trim();
     const sentenceAfter = `${text.slice(sentenceStart, edit.start)}${edit.replacement}${text.slice(
@@ -880,8 +920,8 @@ const applyEdits = (text, sourceMap, edits, ruleId, context = {}) => {
 
     changes.push({
       ruleId,
-      before: text.slice(edit.start, edit.end),
-      after: edit.replacement,
+      before: displayTokens.before,
+      after: displayTokens.after,
       position: edit.start,
       previewBefore: preview.before,
       previewAfter: preview.after,
