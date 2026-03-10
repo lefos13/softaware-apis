@@ -17,11 +17,36 @@ import { sendSuccess } from './common/utils/api-response.js';
 const app = express();
 const openApiSpec = buildOpenApiSpec();
 
+/*
+ * Production browsers often hit the same deployment through both localhost and
+ * 127.0.0.1 during smoke tests. CORS therefore accepts a configured allowlist
+ * rather than one fixed origin string, while still supporting the wildcard
+ * case for local development.
+ */
+const resolveCorsOrigin = (requestOrigin, callback) => {
+  if (!requestOrigin) {
+    callback(null, true);
+    return;
+  }
+
+  if (env.corsOrigin === '*') {
+    callback(null, true);
+    return;
+  }
+
+  if (env.corsOrigins.includes(requestOrigin)) {
+    callback(null, true);
+    return;
+  }
+
+  callback(new Error(`CORS origin not allowed: ${requestOrigin}`));
+};
+
 app.disable('x-powered-by');
 app.use(helmet());
 app.use(
   cors({
-    origin: env.corsOrigin,
+    origin: resolveCorsOrigin,
     exposedHeaders: ['Content-Disposition', 'X-Operation-Message', 'X-Request-Id', 'X-Task-Id'],
   }),
 );

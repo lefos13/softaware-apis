@@ -9,17 +9,21 @@
     "runtime:install": "node src/scripts/ensure-ocr-runtime.js --install",
     "admin:token:create": "node src/scripts/admin-token.js",
     "admin:token:create:superadmin": "node src/scripts/admin-token.js --alias=\"CLI superadmin\" --ttl=30d",
+    "admin:token:create:prod": "DOTENV_CONFIG_PATH=.env.production NODE_ENV=production node src/scripts/admin-token.js",
+    "admin:token:create:superadmin:prod": "DOTENV_CONFIG_PATH=.env.production NODE_ENV=production node src/scripts/admin-token.js --alias=\"CLI superadmin\" --ttl=30d",
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "run": "HOST=0.0.0.0 node src/server.js",
     "check": "node --check src/server.js",
     "test": "node --test",
     "openapi:export": "node src/scripts/export-openapi.js",
+    "deploy:prod": "bash ./scripts/deploy-production.sh",
+    "pm2:reload": "pm2 startOrReload ecosystem.config.cjs --env production --update-env",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "prepare": "husky"
+    "prepare": "sh -c '[ \"$HUSKY\" = \"0\" ] || husky'"
   },
   "keywords": [
     "express",

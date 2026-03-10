@@ -33,6 +33,28 @@ This keeps the project simple now, while making it easy to split heavy tasks int
 
 Server default: `http://localhost:3000`
 
+## Production deploy
+
+1. Copy the production template and fill in real secrets and domains:
+   ```bash
+   cp .env.production.example .env.production
+   ```
+2. Ensure `pm2` is installed on the target host and OCR runtime dependencies are available if PDF-to-Word stays enabled.
+3. Run the deploy script:
+   ```bash
+   npm run deploy:prod
+   ```
+
+What it does:
+
+- loads `.env.production`
+- installs production dependencies with `npm ci --omit=dev`
+- verifies OCR runtime availability
+- creates runtime data/log directories if missing
+- reloads the app through PM2 using `ecosystem.config.cjs`
+
+Default PM2 process name: `softaware-apis`
+
 ## Admin and superadmin tokens
 
 Admin reports and superadmin controls use plaintext tokens minted by the backend CLI.
@@ -135,6 +157,11 @@ PUBLIC_BASE_URL=https://your-api-domain.com
 ```
 
 in `.env` so generated server URLs match the real environment.
+
+If the frontend can access the same API from more than one browser origin
+(for example both `http://localhost:4173` and `http://127.0.0.1:4173` during
+smoke tests), set `CORS_ORIGIN` and `TRUSTED_CLIENT_ORIGINS` as comma-separated
+allowlists with every origin you want to accept.
 
 ### Frontend integration examples
 

@@ -4,7 +4,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { env } from '../../config/env.js';
 import { ACCESS_TOKEN_SERVICE_FLAGS } from './admin-token.constants.js';
@@ -114,4 +114,41 @@ test('CLI superadmin creation and access-token lifecycle work end to end', () =>
   });
   assert.equal(resetRecord.tokenId, created.record.tokenId);
   assert.ok(Date.parse(resetRecord.usageResetAt || ''));
+});
+
+/*
+ * Token resolution must re-read the persisted store on each lookup so tokens
+ * added by an external editor or sync process become valid on the next request
+ * without requiring a server restart.
+ */
+test('resolveStoredToken picks up tokens added directly to admin-token-service store file', () => {
+  resetStore();
+
+  const created = createAccessToken({
+    alias: 'Externally added token',
+    servicePolicies: {
+      [ACCESS_TOKEN_SERVICE_FLAGS.BOOKS_GREEK_EDITOR]: '100000_words',
+    },
+    ttlSeconds: parseTokenTtl('30d'),
+    actorTokenId: 'external-test-actor',
+  });
+
+  const persistedStore = JSON.parse(readFileSync(testStoreFile, 'utf8'));
+  const persistedRecord = persistedStore.tokens[0];
+
+  writeFileSync(
+    testStoreFile,
+    `${JSON.stringify({ version: persistedStore.version, tokens: [] }, null, 2)}\n`,
+    'utf8',
+  );
+  assert.equal(resolveStoredToken(created.token), null);
+
+  writeFileSync(
+    testStoreFile,
+    `${JSON.stringify({ version: persistedStore.version, tokens: [persistedRecord] }, null, 2)}\n`,
+    'utf8',
+  );
+
+  assert.equal(resolveStoredToken(created.token)?.status, 'active');
+  assert.equal(resolveStoredToken(created.token)?.record?.alias, 'Externally added token');
 });

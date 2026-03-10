@@ -4,7 +4,16 @@
  */
 import dotenv from 'dotenv';
 
-dotenv.config();
+/*
+ * Production deploys need a distinct env file without changing application
+ * code or PM2 commands, so config loading now prefers an explicit override and
+ * otherwise switches between .env.production and .env by NODE_ENV.
+ */
+const dotenvPath =
+  process.env.DOTENV_CONFIG_PATH ||
+  ((process.env.NODE_ENV || 'development') === 'production' ? '.env.production' : '.env');
+
+dotenv.config({ path: dotenvPath });
 
 const asInt = (value, fallback) => {
   const parsed = Number.parseInt(value, 10);
@@ -47,6 +56,7 @@ export const env = {
   port,
   publicBaseUrl: process.env.PUBLIC_BASE_URL || `http://localhost:${port}`,
   corsOrigin: process.env.CORS_ORIGIN || '*',
+  corsOrigins: asList(process.env.CORS_ORIGIN),
   maxUploadFiles: asInt(process.env.MAX_UPLOAD_FILES, 20),
   maxFileSizeBytes: asInt(process.env.MAX_FILE_SIZE_MB, 25) * 1024 * 1024,
   maxTotalUploadBytes: asInt(process.env.MAX_TOTAL_UPLOAD_MB, 120) * 1024 * 1024,
