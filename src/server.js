@@ -6,8 +6,8 @@ import { app } from './app.js';
 import { env } from './config/env.js';
 import { inspectPdfExtractRuntimeDependencies } from './modules/pdf/pdf-extract.runtime.js';
 
-const server = app.listen(env.port, () => {
-  console.log(`[softaware-apis] listening on port ${env.port}`);
+const server = app.listen(env.port, env.host, () => {
+  console.log(`[softaware-apis] listening on ${env.host}:${env.port}`);
 
   if (env.pdfExtractToDocxEnabled) {
     const runtime = inspectPdfExtractRuntimeDependencies();

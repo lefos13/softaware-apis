@@ -39,6 +39,11 @@ const port = asInt(process.env.PORT, 3000);
 
 export const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
+  /*
+   * Binding host is explicit so LAN exposure can be enabled intentionally
+   * through runtime config and kept consistent across start commands.
+   */
+  host: process.env.HOST || '0.0.0.0',
   port,
   publicBaseUrl: process.env.PUBLIC_BASE_URL || `http://localhost:${port}`,
   corsOrigin: process.env.CORS_ORIGIN || '*',
