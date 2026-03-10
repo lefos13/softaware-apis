@@ -17,7 +17,7 @@ module.exports = {
       name: process.env.PM2_APP_NAME || 'softaware-apis',
       cwd: __dirname,
       script: './src/server.js',
-      interpreter: 'node',
+      interpreter: process.env.PM2_NODE_INTERPRETER || 'node',
       exec_mode: 'fork',
       instances: parseInstances(process.env.PM2_INSTANCES),
       autorestart: true,

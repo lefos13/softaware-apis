@@ -27,11 +27,14 @@ set -a
 source "$ENV_FILE"
 set +a
 
+export PM2_NODE_INTERPRETER="${PM2_NODE_INTERPRETER:-$(command -v node)}"
+
 mkdir -p logs
 mkdir -p "$(dirname "${ADMIN_TOKEN_STORE_FILE:-data/admin-tokens.json}")"
 mkdir -p "$(dirname "${ACCESS_USAGE_STORE_FILE:-data/access-usage.sqlite}")"
 
 HUSKY=0 npm ci --omit=dev
+npm run native:sync
 npm run runtime:check
 pm2 startOrReload ecosystem.config.cjs --env production --update-env
 pm2 save
