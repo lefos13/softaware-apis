@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 /*
 Runs Husky through Node so npm install does not depend on shell-specific
 resolution of the husky binary on Windows. If Husky is intentionally disabled
