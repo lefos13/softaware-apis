@@ -8,6 +8,11 @@ import { basename, resolve } from 'node:path';
 import { ApiError } from '../../common/utils/api-error.js';
 import { sendSuccess } from '../../common/utils/api-response.js';
 import { buildPlanServicesSummary, listUsageHistory } from '../access/access-usage.service.js';
+import {
+  approveTokenRequest,
+  listTokenRequests,
+  rejectTokenRequest,
+} from '../access/access-request.service.js';
 import { requireSuperAdminToken } from './admin-auth.middleware.js';
 import {
   createAccessToken,
@@ -263,6 +268,55 @@ adminRouter.get('/tokens', (req, res, next) => {
         ...tokenData,
         tokens,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.get('/token-requests', (req, res, next) => {
+  try {
+    const data = listTokenRequests({
+      status: req.query.status,
+    });
+
+    sendSuccess(res, req, {
+      message: 'Token requests fetched successfully',
+      data,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post('/token-requests/:requestId/approve', async (req, res, next) => {
+  try {
+    const result = await approveTokenRequest({
+      requestId: req.params.requestId,
+      actorTokenId: req.adminAuth?.tokenId || null,
+      ttl: req.body?.ttl,
+    });
+
+    sendSuccess(res, req, {
+      message: 'Token request approved successfully',
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post('/token-requests/:requestId/reject', async (req, res, next) => {
+  try {
+    const result = await rejectTokenRequest({
+      requestId: req.params.requestId,
+      actorTokenId: req.adminAuth?.tokenId || null,
+      reason: req.body?.reason,
+    });
+
+    sendSuccess(res, req, {
+      message: 'Token request rejected successfully',
+      data: result,
     });
   } catch (error) {
     next(error);

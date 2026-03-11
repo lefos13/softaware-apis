@@ -10,6 +10,7 @@ import {
   ACCESS_SERVICE_KEY_LIST,
   FREE_ACCESS_SERVICE_POLICIES,
 } from './access-policy.constants.js';
+import { buildAccessPlanCatalog, createTokenRequest } from './access-request.service.js';
 import { requireTokenDashboardAccess, resolveAccessCaller } from './access-plan.middleware.js';
 import { buildPlanServicesSummary, listUsageHistory } from './access-usage.service.js';
 
@@ -77,6 +78,35 @@ accessRouter.get('/plan', (req, res, next) => {
           ? 'Access token plan fetched successfully'
           : 'Free access plan fetched successfully',
       data: buildPlanPayload(caller),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+accessRouter.get('/catalog', (req, res, next) => {
+  try {
+    sendSuccess(res, req, {
+      message: 'Access plan catalog fetched successfully',
+      data: buildAccessPlanCatalog(),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+accessRouter.post('/token-requests', (req, res, next) => {
+  try {
+    const request = createTokenRequest({
+      alias: req.body?.alias,
+      email: req.body?.email,
+      servicePolicies: req.body?.servicePolicies,
+    });
+
+    sendSuccess(res, req, {
+      statusCode: 201,
+      message: 'Token request submitted successfully',
+      data: { request },
     });
   } catch (error) {
     next(error);

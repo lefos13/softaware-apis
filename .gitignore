@@ -12,3 +12,4 @@ data/access-usage.sqlite
 data/access-usage.sqlite-shm
 data/access-usage.sqlite-wal
 data/admin-tokens.json
+data/token-requests.json

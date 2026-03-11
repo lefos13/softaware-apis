@@ -130,6 +130,100 @@
         }
       }
     },
+    "/api/access/catalog": {
+      "get": {
+        "tags": [
+          "Access"
+        ],
+        "summary": "Fetch the public access plan catalog",
+        "description": "Returns the free-plan defaults, paid token presets by service, and the default TTL used when a token request is approved.",
+        "operationId": "getAccessPlanCatalog",
+        "responses": {
+          "200": {
+            "description": "Public plan catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessPlanCatalogSuccessResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/access/token-requests": {
+      "post": {
+        "tags": [
+          "Access"
+        ],
+        "summary": "Submit a paid token request",
+        "description": "Creates a pending token request with an alias, email, and requested paid service presets. The request remains pending until a superadmin approves or rejects it.",
+        "operationId": "createTokenRequest",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequestCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Token request submitted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenRequestMutationSuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid alias, email, or servicePolicies payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Mutating request rate limit exceeded for source IP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/access/dashboard": {
       "get": {
         "tags": [
@@ -3256,6 +3350,337 @@
         }
       }
     },
+    "/api/admin/token-requests": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List token requests",
+        "description": "Returns pending or historical token requests so the superadmin can review approvals and rejections from the admin tokens screen.",
+        "operationId": "listTokenRequests",
+        "parameters": [
+          {
+            "name": "x-admin-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Superadmin token minted via server-side CLI."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "approved",
+                "rejected"
+              ]
+            },
+            "description": "Optional request status filter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Token requests fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenRequestListSuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing superadmin token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Invalid token or token role is not superadmin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/token-requests/{requestId}/approve": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Approve a token request",
+        "description": "Creates the requested access token, emails it to the request owner, and marks the request approved. If email delivery fails, the created token is revoked and the request remains pending.",
+        "operationId": "approveTokenRequest",
+        "parameters": [
+          {
+            "name": "x-admin-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Superadmin token minted via server-side CLI."
+          },
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Token request id to approve."
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequestApproveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token request approved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenRequestApprovalSuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid TTL payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing superadmin token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Invalid token or token role is not superadmin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Token request was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Token request already reviewed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Email delivery failed and the created token was revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Email delivery is not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/token-requests/{requestId}/reject": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Reject a token request",
+        "description": "Emails the rejection decision to the request owner and marks the request rejected. If email delivery fails, the request remains pending.",
+        "operationId": "rejectTokenRequest",
+        "parameters": [
+          {
+            "name": "x-admin-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Superadmin token minted via server-side CLI."
+          },
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Token request id to reject."
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequestRejectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token request rejected successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenRequestMutationSuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing superadmin token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Invalid token or token role is not superadmin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Token request was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Token request already reviewed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Email delivery failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Email delivery is not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/tokens/{tokenId}": {
       "patch": {
         "tags": [
@@ -5297,6 +5722,157 @@
           "meta"
         ]
       },
+      "AccessCatalogPolicy": {
+        "type": "object",
+        "properties": {
+          "preset": {
+            "type": "string",
+            "example": "30_per_day"
+          },
+          "kind": {
+            "type": "string",
+            "example": "requests_per_day"
+          },
+          "requestsPerDay": {
+            "nullable": true,
+            "type": "integer",
+            "minimum": 0,
+            "example": 30
+          },
+          "wordsTotal": {
+            "nullable": true,
+            "type": "integer",
+            "minimum": 0,
+            "example": 100000
+          }
+        },
+        "required": [
+          "preset",
+          "kind",
+          "requestsPerDay",
+          "wordsTotal"
+        ]
+      },
+      "AccessPlanCatalogService": {
+        "type": "object",
+        "properties": {
+          "serviceKey": {
+            "type": "string",
+            "enum": [
+              "books_greek_editor",
+              "pdf",
+              "image",
+              "tasks"
+            ]
+          },
+          "preset": {
+            "nullable": true,
+            "type": "string",
+            "example": "free_default"
+          },
+          "kind": {
+            "nullable": true,
+            "type": "string",
+            "example": "composite"
+          },
+          "requestsPerDay": {
+            "nullable": true,
+            "type": "integer",
+            "minimum": 0,
+            "example": 1
+          },
+          "wordsTotal": {
+            "nullable": true,
+            "type": "integer",
+            "minimum": 0,
+            "example": 10000
+          },
+          "presets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessCatalogPolicy"
+            }
+          }
+        },
+        "required": [
+          "serviceKey"
+        ]
+      },
+      "AccessPlanCatalogPayload": {
+        "type": "object",
+        "properties": {
+          "freePlan": {
+            "type": "object",
+            "properties": {
+              "planType": {
+                "type": "string",
+                "enum": [
+                  "free"
+                ],
+                "example": "free"
+              },
+              "services": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AccessPlanCatalogService"
+                }
+              }
+            },
+            "required": [
+              "planType",
+              "services"
+            ]
+          },
+          "paidPlans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessPlanCatalogService"
+            }
+          },
+          "requestDefaults": {
+            "type": "object",
+            "properties": {
+              "ttl": {
+                "type": "string",
+                "example": "30d"
+              }
+            },
+            "required": [
+              "ttl"
+            ]
+          }
+        },
+        "required": [
+          "freePlan",
+          "paidPlans",
+          "requestDefaults"
+        ]
+      },
+      "AccessPlanCatalogSuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string",
+            "example": "Access plan catalog fetched successfully"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AccessPlanCatalogPayload"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "data",
+          "meta"
+        ]
+      },
       "AccessHistorySuccessResponse": {
         "type": "object",
         "properties": {
@@ -5357,6 +5933,248 @@
           },
           "data": {
             "$ref": "#/components/schemas/AccessDashboardPayload"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "data",
+          "meta"
+        ]
+      },
+      "TokenRequestPayload": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "example": "45055d43-cc7b-4927-8a67-c1cb9c29cdea"
+          },
+          "alias": {
+            "type": "string",
+            "example": "Editorial desk"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "editor@example.com"
+          },
+          "servicePolicies": {
+            "$ref": "#/components/schemas/AccessServicePolicyMap"
+          },
+          "createdAt": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected"
+            ],
+            "example": "pending"
+          },
+          "reviewedAt": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          },
+          "reviewedByTokenId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "resolvedTokenId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "rejectionReason": {
+            "nullable": true,
+            "type": "string"
+          },
+          "lastEmailError": {
+            "nullable": true,
+            "type": "string"
+          },
+          "lastEmailAttemptAt": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "requestId",
+          "alias",
+          "email",
+          "servicePolicies",
+          "createdAt",
+          "status",
+          "reviewedAt",
+          "reviewedByTokenId",
+          "resolvedTokenId",
+          "rejectionReason",
+          "lastEmailError",
+          "lastEmailAttemptAt"
+        ]
+      },
+      "TokenRequestCreateRequest": {
+        "type": "object",
+        "properties": {
+          "alias": {
+            "type": "string",
+            "example": "Editorial desk"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "editor@example.com"
+          },
+          "servicePolicies": {
+            "$ref": "#/components/schemas/AccessServicePolicyMap"
+          }
+        },
+        "required": [
+          "alias",
+          "email",
+          "servicePolicies"
+        ]
+      },
+      "TokenRequestApproveRequest": {
+        "type": "object",
+        "properties": {
+          "ttl": {
+            "type": "string",
+            "example": "30d"
+          }
+        }
+      },
+      "TokenRequestRejectRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "example": "Requested limits are not available right now."
+          }
+        }
+      },
+      "TokenRequestListPayload": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 3
+          },
+          "pendingCount": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 2
+          },
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TokenRequestPayload"
+            }
+          }
+        },
+        "required": [
+          "count",
+          "pendingCount",
+          "requests"
+        ]
+      },
+      "TokenRequestMutationPayload": {
+        "type": "object",
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/TokenRequestPayload"
+          }
+        },
+        "required": [
+          "request"
+        ]
+      },
+      "TokenRequestApprovalPayload": {
+        "type": "object",
+        "properties": {
+          "request": {
+            "$ref": "#/components/schemas/TokenRequestPayload"
+          },
+          "token": {
+            "$ref": "#/components/schemas/AccessTokenInventoryItem"
+          }
+        },
+        "required": [
+          "request",
+          "token"
+        ]
+      },
+      "TokenRequestListSuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string",
+            "example": "Token requests fetched successfully"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TokenRequestListPayload"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "data",
+          "meta"
+        ]
+      },
+      "TokenRequestMutationSuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string",
+            "example": "Token request submitted successfully"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TokenRequestMutationPayload"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        },
+        "required": [
+          "success",
+          "message",
+          "data",
+          "meta"
+        ]
+      },
+      "TokenRequestApprovalSuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string",
+            "example": "Token request approved successfully"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TokenRequestApprovalPayload"
           },
           "meta": {
             "$ref": "#/components/schemas/ResponseMeta"

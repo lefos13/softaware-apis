@@ -1,6 +1,6 @@
-/**
- * Why this exists: all runtime configuration is validated in one place so
- * modules consume typed, safe values instead of reading process.env directly.
+/*
+ * Runtime configuration is validated in one place so modules consume typed,
+ * safe values instead of reading process.env directly.
  */
 import dotenv from 'dotenv';
 
@@ -74,8 +74,17 @@ export const env = {
   mutatingRateLimitPerMinute: asInt(process.env.MUTATING_RATE_LIMIT_PER_MINUTE, 5),
   adminTokenStoreFile: process.env.ADMIN_TOKEN_STORE_FILE || 'data/admin-tokens.json',
   adminTokenPepper: process.env.ADMIN_TOKEN_PEPPER || 'local-dev-admin-token-pepper',
+  tokenRequestStoreFile: process.env.TOKEN_REQUEST_STORE_FILE || 'data/token-requests.json',
+  tokenRequestDefaultTtl: process.env.TOKEN_REQUEST_DEFAULT_TTL || '30d',
   accessUsageStoreFile: process.env.ACCESS_USAGE_STORE_FILE || 'data/access-usage.sqlite',
   accessUsageHashSalt: process.env.ACCESS_USAGE_HASH_SALT || 'local-dev-access-usage-hash-salt',
+  smtpHost: process.env.SMTP_HOST || '',
+  smtpPort: asInt(process.env.SMTP_PORT, 587),
+  smtpSecure: asBool(process.env.SMTP_SECURE, false),
+  smtpUser: process.env.SMTP_USER || '',
+  smtpPass: process.env.SMTP_PASS || '',
+  emailFrom: process.env.EMAIL_FROM || '',
+  emailReplyTo: process.env.EMAIL_REPLY_TO || '',
   trustedClientOrigins: asList(process.env.TRUSTED_CLIENT_ORIGINS),
   failureReportHashSalt: process.env.FAILURE_REPORT_HASH_SALT || 'local-dev-report-hash-salt',
   webhookBinTtlSeconds: asInt(process.env.WEBHOOK_BIN_TTL_SECONDS, 24 * 60 * 60),
