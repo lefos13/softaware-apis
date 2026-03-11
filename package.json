@@ -24,7 +24,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "prepare": "sh -c '[ \"$HUSKY\" = \"0\" ] || husky'"
+    "prepare": "node src/scripts/prepare-husky.cjs"
   },
   "keywords": [
     "express",
