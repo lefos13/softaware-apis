@@ -55,6 +55,42 @@ What it does:
 
 Default PM2 process name: `softaware-apis`
 
+## Gmail setup for Nodemailer
+
+Use this when you want backend token-approval emails to be delivered through Gmail.
+
+1. Configure backend env:
+   ```bash
+   EMAIL_PROVIDER=gmail
+   GMAIL_USER=your-account@gmail.com
+   GMAIL_APP_PASSWORD=your-16-char-app-password
+   EMAIL_FROM="Softaware Tools <your-account@gmail.com>"
+   EMAIL_REPLY_TO=your-account@gmail.com
+   ```
+2. Leave `SMTP_*` as-is when `EMAIL_PROVIDER=gmail`.
+3. Restart the API after updating env values.
+
+OAuth2 alternative (instead of `GMAIL_APP_PASSWORD`):
+
+```bash
+EMAIL_PROVIDER=gmail
+GMAIL_USER=your-account@gmail.com
+GMAIL_CLIENT_ID=...
+GMAIL_CLIENT_SECRET=...
+GMAIL_REFRESH_TOKEN=...
+# Optional if pre-minted by your token flow:
+GMAIL_ACCESS_TOKEN=
+EMAIL_FROM="Softaware Tools <your-account@gmail.com>"
+```
+
+Manual actions required in Google Account:
+
+1. Enable 2-Step Verification for the Gmail account.
+2. Create an App Password for Mail and copy the generated 16-character value.
+3. Put that value in `GMAIL_APP_PASSWORD` (no spaces).
+4. If you use a Google Workspace account, confirm SMTP relay/app-password policies allow this login.
+5. Send one real request approval/rejection flow and verify the message is delivered (including spam folder checks during first run).
+
 ## Admin and superadmin tokens
 
 Admin reports and superadmin controls use plaintext tokens minted by the backend CLI.

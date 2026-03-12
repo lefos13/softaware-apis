@@ -83,6 +83,7 @@ test('approveTokenRequest creates the token, sends email, and marks the request 
   });
 
   let emailedToken = '';
+  let emailedHtml = '';
   const result = await approveTokenRequest({
     requestId: request.requestId,
     actorTokenId: 'superadmin-token-id',
@@ -96,8 +97,9 @@ test('approveTokenRequest creates the token, sends email, and marks the request 
         actorTokenId,
       },
     }),
-    sendEmailImpl: async ({ text }) => {
+    sendEmailImpl: async ({ text, html }) => {
       emailedToken = String(text || '');
+      emailedHtml = String(html || '');
       return { messageId: 'msg-1' };
     },
   });
@@ -105,10 +107,48 @@ test('approveTokenRequest creates the token, sends email, and marks the request 
   assert.equal(result.request.status, 'approved');
   assert.equal(result.request.resolvedTokenId, 'tok-approved');
   assert.match(emailedToken, /sat_test_approved/);
+  assert.match(emailedToken, /Token id: tok-approved/);
+  assert.match(emailedToken, /Γεια σας/);
+  assert.match(emailedHtml, /Approved \/ Εγκρίθηκε/);
+  assert.match(emailedHtml, /Token id \/ Αναγνωριστικό token/);
+  assert.match(emailedHtml, /tok-approved/);
+  assert.match(emailedHtml, /table role="presentation"/);
 
   const listed = listTokenRequests();
   assert.equal(listed.pendingCount, 0);
   assert.equal(listed.requests[0].status, 'approved');
+});
+
+test('rejectTokenRequest sends a user-friendly bilingual email and marks request rejected', async () => {
+  resetStore();
+
+  const request = createTokenRequest({
+    alias: 'Image desk',
+    email: 'images@example.com',
+    servicePolicies: {
+      image: '20_per_day',
+    },
+  });
+
+  let emailedText = '';
+  let emailedHtml = '';
+  const result = await rejectTokenRequest({
+    requestId: request.requestId,
+    actorTokenId: 'superadmin-token-id',
+    reason: 'Not enough quota available',
+    sendEmailImpl: async ({ text, html }) => {
+      emailedText = String(text || '');
+      emailedHtml = String(html || '');
+      return { messageId: 'msg-2' };
+    },
+  });
+
+  assert.equal(result.request.status, 'rejected');
+  assert.equal(result.request.rejectionReason, 'Not enough quota available');
+  assert.match(emailedText, /Not enough quota available/);
+  assert.match(emailedText, /Μπορείτε να στείλετε νέο αίτημα/);
+  assert.match(emailedHtml, /Update \/ Ενημέρωση/);
+  assert.match(emailedHtml, /Reason \/ Αιτία/);
 });
 
 test('rejectTokenRequest leaves the request pending when email delivery fails', async () => {

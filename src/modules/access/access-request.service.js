@@ -295,6 +295,210 @@ const buildPolicySummaryHtml = (servicePolicies) =>
     )
     .join('');
 
+/*
+ * Approval and rejection emails now use one branded template with clearer
+ * bilingual copy so recipients can quickly understand the decision and next step.
+ */
+const renderEmailLayout = ({
+  statusLabel,
+  statusTone,
+  heading,
+  intro,
+  summaryTitle,
+  summaryHtml,
+  tokenLabel = '',
+  tokenValue = '',
+  ttlLabel = '',
+  ttlValue = '',
+  reasonLabel = '',
+  reasonValue = '',
+  tokenIdLabel = '',
+  tokenIdValue = '',
+  footer,
+}) => `
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0;padding:24px;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:660px;margin:0 auto;background:#ffffff;border:1px solid #dbe5ef;border-radius:16px;overflow:hidden;">
+          <tr>
+            <td style="padding:22px 24px 0;">
+              <span style="display:inline-block;padding:6px 12px;border-radius:999px;background:${statusTone};color:#ffffff;font-size:12px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;">
+                ${escapeHtml(statusLabel)}
+              </span>
+              <h1 style="margin:14px 0 8px;font-size:23px;line-height:1.3;color:#0f172a;">
+                ${escapeHtml(heading)}
+              </h1>
+              <p style="margin:0 0 8px;font-size:15px;line-height:1.55;color:#334155;">
+                ${escapeHtml(intro)}
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:14px 24px 0;">
+              <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#0f172a;">
+                ${escapeHtml(summaryTitle)}
+              </p>
+              <ul style="margin:0;padding-left:18px;color:#334155;">
+                ${summaryHtml}
+              </ul>
+            </td>
+          </tr>
+          ${
+            tokenValue
+              ? `
+                <tr>
+                  <td style="padding:16px 24px 0;">
+                    <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#0f172a;">
+                      ${escapeHtml(tokenLabel)}
+                    </p>
+                    <p style="margin:0;padding:12px;border:1px solid #d0dae6;border-radius:12px;background:#f8fafc;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.45;color:#0f172a;word-break:break-all;">
+                      ${escapeHtml(tokenValue)}
+                    </p>
+                  </td>
+                </tr>
+              `
+              : ''
+          }
+          ${
+            tokenIdValue
+              ? `
+                <tr>
+                  <td style="padding:16px 24px 0;">
+                    <p style="margin:0;font-size:14px;line-height:1.55;color:#334155;">
+                      <strong style="color:#0f172a;">${escapeHtml(tokenIdLabel)}:</strong> ${escapeHtml(tokenIdValue)}
+                    </p>
+                  </td>
+                </tr>
+              `
+              : ''
+          }
+          ${
+            ttlValue
+              ? `
+                <tr>
+                  <td style="padding:16px 24px 0;">
+                    <p style="margin:0;font-size:14px;line-height:1.55;color:#334155;">
+                      <strong style="color:#0f172a;">${escapeHtml(ttlLabel)}:</strong> ${escapeHtml(ttlValue)}
+                    </p>
+                  </td>
+                </tr>
+              `
+              : ''
+          }
+          ${
+            reasonValue
+              ? `
+                <tr>
+                  <td style="padding:16px 24px 0;">
+                    <p style="margin:0;font-size:14px;line-height:1.55;color:#334155;">
+                      <strong style="color:#0f172a;">${escapeHtml(reasonLabel)}:</strong> ${escapeHtml(reasonValue)}
+                    </p>
+                  </td>
+                </tr>
+              `
+              : ''
+          }
+          <tr>
+            <td style="padding:16px 24px 24px;">
+              <p style="margin:0;font-size:14px;line-height:1.6;color:#334155;">
+                ${escapeHtml(footer)}
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+`;
+
+const buildApprovalEmailText = ({ alias, token, tokenId, ttl, servicePolicies }) =>
+  [
+    'Hello,',
+    `Great news. Your Softaware Tools request for "${alias}" was approved.`,
+    '',
+    'Token:',
+    token,
+    `Token id: ${tokenId}`,
+    `Valid for: ${ttl}`,
+    '',
+    'Requested service limits:',
+    buildPolicySummaryText(servicePolicies),
+    '',
+    'Keep this token private and use it from the Plans page when needed.',
+    '',
+    '---',
+    'Γεια σας,',
+    `Το αίτημα Softaware Tools για "${alias}" εγκρίθηκε.`,
+    '',
+    'Token:',
+    token,
+    `Token id: ${tokenId}`,
+    `Διάρκεια: ${ttl}`,
+    '',
+    'Ζητούμενα όρια υπηρεσιών:',
+    buildPolicySummaryText(servicePolicies),
+    '',
+    'Κρατήστε το token ιδιωτικό και χρησιμοποιήστε το από τη σελίδα Πλάνα όταν το χρειαστείτε.',
+  ].join('\n');
+
+const buildApprovalEmailHtml = ({ alias, token, tokenId, ttl, servicePolicies }) =>
+  renderEmailLayout({
+    statusLabel: 'Approved / Εγκρίθηκε',
+    statusTone: '#0f766e',
+    heading: `Your request for "${alias}" was approved.`,
+    intro:
+      'Your access is ready. Save the token below and keep it private. / Η πρόσβασή σας είναι έτοιμη. Αποθηκεύστε το token και κρατήστε το ιδιωτικό.',
+    summaryTitle: 'Requested service limits / Ζητούμενα όρια υπηρεσιών',
+    summaryHtml: buildPolicySummaryHtml(servicePolicies),
+    tokenLabel: 'Token',
+    tokenValue: token,
+    tokenIdLabel: 'Token id / Αναγνωριστικό token',
+    tokenIdValue: tokenId,
+    ttlLabel: 'Valid for / Διάρκεια',
+    ttlValue: ttl,
+    footer:
+      'Use this token in the Softaware Tools Plans page when you need paid access. / Χρησιμοποιήστε το token στη σελίδα Πλάνα του Softaware Tools όταν χρειάζεστε paid πρόσβαση.',
+  });
+
+const buildRejectionEmailText = ({ alias, reason, servicePolicies }) =>
+  [
+    'Hello,',
+    `Your Softaware Tools request for "${alias}" was not approved this time.`,
+    reason ? `Reason: ${reason}` : '',
+    '',
+    'Requested service limits:',
+    buildPolicySummaryText(servicePolicies),
+    '',
+    'You can submit a new request any time from the Plans page.',
+    '',
+    '---',
+    'Γεια σας,',
+    `Το αίτημα Softaware Tools για "${alias}" δεν εγκρίθηκε αυτή τη φορά.`,
+    reason ? `Αιτία: ${reason}` : '',
+    '',
+    'Ζητούμενα όρια υπηρεσιών:',
+    buildPolicySummaryText(servicePolicies),
+    '',
+    'Μπορείτε να στείλετε νέο αίτημα οποιαδήποτε στιγμή από τη σελίδα Πλάνα.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+const buildRejectionEmailHtml = ({ alias, reason, servicePolicies }) =>
+  renderEmailLayout({
+    statusLabel: 'Update / Ενημέρωση',
+    statusTone: '#b45309',
+    heading: `Update for your request "${alias}".`,
+    intro:
+      'This request was not approved yet. You can submit a new one at any time from the Plans page. / Αυτό το αίτημα δεν εγκρίθηκε ακόμη. Μπορείτε να στείλετε νέο οποιαδήποτε στιγμή από τη σελίδα Πλάνα.',
+    summaryTitle: 'Requested service limits / Ζητούμενα όρια υπηρεσιών',
+    summaryHtml: buildPolicySummaryHtml(servicePolicies),
+    reasonLabel: 'Reason / Αιτία',
+    reasonValue: reason,
+    footer:
+      'If your needs changed, send a new request with the updated service limits. / Αν οι ανάγκες σας άλλαξαν, στείλτε νέο αίτημα με τα σωστά όρια υπηρεσιών.',
+  });
+
 const updateRequest = (requestId, updater) => {
   const store = readStore();
   const target = findRequestOrThrow(store, requestId);
@@ -394,23 +598,21 @@ export const approveTokenRequest = async ({
   try {
     await sendEmailImpl({
       to: target.email,
-      subject: `Softaware Tools token approved for ${target.alias}`,
-      text: [
-        `Your token request for "${target.alias}" has been approved.`,
-        '',
-        `Token: ${created.token}`,
-        `TTL: ${ttl}`,
-        '',
-        'Requested service limits:',
-        buildPolicySummaryText(target.servicePolicies),
-      ].join('\n'),
-      html: [
-        `<p>Your token request for <strong>${escapeHtml(target.alias)}</strong> has been approved.</p>`,
-        `<p><strong>Token:</strong> <code>${escapeHtml(created.token)}</code></p>`,
-        `<p><strong>TTL:</strong> ${escapeHtml(ttl)}</p>`,
-        '<p><strong>Requested service limits:</strong></p>',
-        `<ul>${buildPolicySummaryHtml(target.servicePolicies)}</ul>`,
-      ].join(''),
+      subject: `Softaware Tools access approved for ${target.alias}`,
+      text: buildApprovalEmailText({
+        alias: target.alias,
+        token: created.token,
+        tokenId: created.record.tokenId,
+        ttl,
+        servicePolicies: target.servicePolicies,
+      }),
+      html: buildApprovalEmailHtml({
+        alias: target.alias,
+        token: created.token,
+        tokenId: created.record.tokenId,
+        ttl,
+        servicePolicies: target.servicePolicies,
+      }),
     });
   } catch (error) {
     try {
@@ -457,25 +659,17 @@ export const rejectTokenRequest = async ({
   try {
     await sendEmailImpl({
       to: target.email,
-      subject: `Softaware Tools token request update for ${target.alias}`,
-      text: [
-        `Your token request for "${target.alias}" was rejected.`,
-        normalizedReason ? '' : '',
-        normalizedReason ? `Reason: ${normalizedReason}` : '',
-        '',
-        'Requested service limits:',
-        buildPolicySummaryText(target.servicePolicies),
-      ]
-        .filter(Boolean)
-        .join('\n'),
-      html: [
-        `<p>Your token request for <strong>${escapeHtml(target.alias)}</strong> was rejected.</p>`,
-        normalizedReason ? `<p><strong>Reason:</strong> ${escapeHtml(normalizedReason)}</p>` : '',
-        '<p><strong>Requested service limits:</strong></p>',
-        `<ul>${buildPolicySummaryHtml(target.servicePolicies)}</ul>`,
-      ]
-        .filter(Boolean)
-        .join(''),
+      subject: `Softaware Tools request update for ${target.alias}`,
+      text: buildRejectionEmailText({
+        alias: target.alias,
+        reason: normalizedReason,
+        servicePolicies: target.servicePolicies,
+      }),
+      html: buildRejectionEmailHtml({
+        alias: target.alias,
+        reason: normalizedReason,
+        servicePolicies: target.servicePolicies,
+      }),
     });
   } catch (error) {
     updateRequest(requestId, (record) => ({

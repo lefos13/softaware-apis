@@ -8,7 +8,16 @@ import { env } from '../../config/env.js';
 
 let transporter = null;
 
-const hasMailConfig = () =>
+/*
+ * Email delivery supports both generic SMTP and Gmail so access approval flows
+ * can use provider-specific auth while preserving one shared error contract.
+ */
+const getEmailProvider = () =>
+  String(env.emailProvider || 'smtp')
+    .trim()
+    .toLowerCase();
+
+const hasSmtpConfig = () =>
   Boolean(
     String(env.smtpHost || '').trim() &&
     Number.isInteger(env.smtpPort) &&
@@ -16,7 +25,61 @@ const hasMailConfig = () =>
     String(env.emailFrom || '').trim(),
   );
 
+const hasGmailAppPasswordConfig = () =>
+  Boolean(
+    String(env.gmailUser || '').trim() &&
+    String(env.gmailAppPassword || '').trim() &&
+    String(env.emailFrom || '').trim(),
+  );
+
+const hasGmailOauth2Config = () =>
+  Boolean(
+    String(env.gmailUser || '').trim() &&
+    String(env.gmailClientId || '').trim() &&
+    String(env.gmailClientSecret || '').trim() &&
+    String(env.gmailRefreshToken || '').trim() &&
+    String(env.emailFrom || '').trim(),
+  );
+
+const hasMailConfig = () => {
+  const provider = getEmailProvider();
+
+  if (provider === 'gmail') {
+    return hasGmailAppPasswordConfig() || hasGmailOauth2Config();
+  }
+
+  return hasSmtpConfig();
+};
+
 const buildTransportOptions = () => {
+  const provider = getEmailProvider();
+  if (provider === 'gmail') {
+    const gmailUser = String(env.gmailUser || '').trim();
+    const gmailAppPassword = String(env.gmailAppPassword || '').trim();
+
+    if (gmailAppPassword) {
+      return {
+        service: 'gmail',
+        auth: {
+          user: gmailUser,
+          pass: gmailAppPassword,
+        },
+      };
+    }
+
+    return {
+      service: 'gmail',
+      auth: {
+        type: 'OAuth2',
+        user: gmailUser,
+        clientId: String(env.gmailClientId || '').trim(),
+        clientSecret: String(env.gmailClientSecret || '').trim(),
+        refreshToken: String(env.gmailRefreshToken || '').trim(),
+        accessToken: String(env.gmailAccessToken || '').trim() || undefined,
+      },
+    };
+  }
+
   const authUser = String(env.smtpUser || '').trim();
   const authPass = String(env.smtpPass || '');
 
@@ -42,11 +105,17 @@ export const assertEmailDeliveryConfigured = () => {
     return;
   }
 
+  const provider = getEmailProvider();
+  const issue =
+    provider === 'gmail'
+      ? 'Set EMAIL_PROVIDER=gmail, GMAIL_USER, EMAIL_FROM and either GMAIL_APP_PASSWORD or Gmail OAuth2 credentials'
+      : 'Set SMTP_HOST, SMTP_PORT, and EMAIL_FROM before approving or rejecting requests';
+
   throw new ApiError(503, 'EMAIL_NOT_CONFIGURED', 'Email delivery is not configured', {
     details: [
       {
-        field: 'smtp',
-        issue: 'Set SMTP_HOST, SMTP_PORT, and EMAIL_FROM before approving or rejecting requests',
+        field: provider === 'gmail' ? 'gmail' : 'smtp',
+        issue,
       },
     ],
   });
