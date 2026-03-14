@@ -43,7 +43,8 @@ test('catalog exposes free and paid service plans', () => {
 
   assert.equal(catalog.freePlan.planType, 'free');
   assert.ok(Array.isArray(catalog.freePlan.services));
-  assert.ok(Array.isArray(catalog.paidPlans));
+  assert.ok(Array.isArray(catalog.premiumPlans));
+  assert.equal(catalog.premiumPlans[0].presets[0].pricing.currency, 'EUR');
   assert.equal(catalog.requestDefaults.ttl, '30d');
 });
 
@@ -61,6 +62,7 @@ test('createTokenRequest stores a pending request and lists it for admins', () =
 
   assert.equal(request.status, 'pending');
   assert.equal(request.email, 'editor@example.com');
+  assert.equal(request.pricing.totalAmount, 158);
 
   const listed = listTokenRequests();
   assert.equal(listed.count, 1);
@@ -69,6 +71,7 @@ test('createTokenRequest stores a pending request and lists it for admins', () =
     books_greek_editor: '300000_words',
     pdf: '30_per_day',
   });
+  assert.equal(listed.requests[0].pricing.totalAmount, 158);
 });
 
 test('approveTokenRequest creates the token, sends email, and marks the request approved', async () => {
@@ -84,19 +87,30 @@ test('approveTokenRequest creates the token, sends email, and marks the request 
 
   let emailedToken = '';
   let emailedHtml = '';
+  let capturedPricingSnapshot = null;
   const result = await approveTokenRequest({
     requestId: request.requestId,
     actorTokenId: 'superadmin-token-id',
-    createAccessTokenImpl: ({ alias, servicePolicies, ttlSeconds, actorTokenId }) => ({
-      token: 'sat_test_approved',
-      record: {
-        tokenId: 'tok-approved',
-        alias,
-        servicePolicies,
-        ttlSeconds,
-        actorTokenId,
-      },
-    }),
+    createAccessTokenImpl: ({
+      alias,
+      servicePolicies,
+      ttlSeconds,
+      actorTokenId,
+      pricingSnapshot,
+    }) => {
+      capturedPricingSnapshot = pricingSnapshot;
+      return {
+        token: 'sat_test_approved',
+        record: {
+          tokenId: 'tok-approved',
+          alias,
+          servicePolicies,
+          pricing: pricingSnapshot,
+          ttlSeconds,
+          actorTokenId,
+        },
+      };
+    },
     sendEmailImpl: async ({ text, html }) => {
       emailedToken = String(text || '');
       emailedHtml = String(html || '');
@@ -106,6 +120,8 @@ test('approveTokenRequest creates the token, sends email, and marks the request 
 
   assert.equal(result.request.status, 'approved');
   assert.equal(result.request.resolvedTokenId, 'tok-approved');
+  assert.equal(result.request.pricing.totalAmount, 49);
+  assert.equal(capturedPricingSnapshot.totalAmount, 49);
   assert.match(emailedToken, /sat_test_approved/);
   assert.match(emailedToken, /Token id: tok-approved/);
   assert.match(emailedToken, /Γεια σας/);
@@ -145,6 +161,7 @@ test('rejectTokenRequest sends a user-friendly bilingual email and marks request
 
   assert.equal(result.request.status, 'rejected');
   assert.equal(result.request.rejectionReason, 'Not enough quota available');
+  assert.equal(result.request.pricing.totalAmount, 29);
   assert.match(emailedText, /Not enough quota available/);
   assert.match(emailedText, /Μπορείτε να στείλετε νέο αίτημα/);
   assert.match(emailedHtml, /Update \/ Ενημέρωση/);

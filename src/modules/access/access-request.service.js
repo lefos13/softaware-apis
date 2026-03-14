@@ -15,8 +15,11 @@ import {
 } from '../admin/admin-token.service.js';
 import {
   ACCESS_SERVICE_KEY_LIST,
+  ACCESS_PREMIUM_PRICING_DEFAULTS,
+  ACCESS_PREMIUM_SERVICE_PRESET_CONFIG,
   ACCESS_TOKEN_SERVICE_POLICY_PRESETS,
   FREE_ACCESS_SERVICE_POLICIES,
+  buildPremiumPricingSnapshot,
 } from './access-policy.constants.js';
 
 const STORE_VERSION = 1;
@@ -99,6 +102,57 @@ const sanitizePolicy = (policy) => ({
   wordsTotal: Number.isInteger(policy?.wordsTotal) ? policy.wordsTotal : null,
 });
 
+const sanitizePricingSnapshot = (pricing) => {
+  if (!pricing || typeof pricing !== 'object') {
+    return null;
+  }
+
+  const items = Array.isArray(pricing?.items)
+    ? pricing.items
+        .map((item) => ({
+          serviceKey: String(item?.serviceKey || '').trim(),
+          preset: String(item?.preset || '').trim(),
+          amount: Number.isFinite(Number(item?.amount)) ? Number(item.amount) : null,
+          currency: String(item?.currency || ACCESS_PREMIUM_PRICING_DEFAULTS.currency).trim(),
+          billingMode: String(
+            item?.billingMode || ACCESS_PREMIUM_PRICING_DEFAULTS.billingMode,
+          ).trim(),
+        }))
+        .filter((item) => item.serviceKey && item.preset && item.amount !== null)
+    : [];
+
+  return {
+    totalAmount: Number.isFinite(Number(pricing?.totalAmount)) ? Number(pricing.totalAmount) : 0,
+    currency: String(pricing?.currency || ACCESS_PREMIUM_PRICING_DEFAULTS.currency).trim(),
+    billingMode: String(pricing?.billingMode || ACCESS_PREMIUM_PRICING_DEFAULTS.billingMode).trim(),
+    items,
+  };
+};
+
+/*
+ * Pricing snapshots are generated on the server from the preset config so the
+ * browser cannot spoof totals and approved tokens can preserve the quoted amount.
+ */
+const ensurePricingSnapshot = (servicePolicies, pricing) => {
+  const snapshot = sanitizePricingSnapshot(pricing) || buildPremiumPricingSnapshot(servicePolicies);
+
+  if (snapshot && snapshot.items.length > 0) {
+    return snapshot;
+  }
+
+  throw new ApiError(
+    500,
+    'INVALID_ACCESS_PRICING_CONFIG',
+    'Pricing is not configured for one or more requested service presets',
+    {
+      details: Object.entries(servicePolicies || {}).map(([serviceKey, policy]) => ({
+        field: `servicePolicies.${serviceKey}`,
+        issue: `Missing pricing for preset ${String(policy?.preset || '')}`,
+      })),
+    },
+  );
+};
+
 const ensureRequestedPolicies = (rawPolicies) => {
   const input =
     rawPolicies && typeof rawPolicies === 'object' && !Array.isArray(rawPolicies)
@@ -159,6 +213,7 @@ const ensureRequestedPolicies = (rawPolicies) => {
 
 const normalizeRequestRecord = (record = {}) => {
   const servicePolicies = ensureRequestedPolicies(record?.servicePolicies || {});
+  const pricing = ensurePricingSnapshot(servicePolicies, record?.pricing);
   const status = ['pending', 'approved', 'rejected'].includes(String(record?.status || ''))
     ? String(record.status)
     : 'pending';
@@ -168,6 +223,7 @@ const normalizeRequestRecord = (record = {}) => {
     alias: ensureAlias(record?.alias),
     email: ensureEmail(record?.email),
     servicePolicies,
+    pricing,
     createdAt: record?.createdAt || new Date().toISOString(),
     status,
     reviewedAt: record?.reviewedAt || null,
@@ -249,6 +305,7 @@ const toPublicRequestRecord = (record) => ({
       String(policy?.preset || ''),
     ]),
   ),
+  pricing: sanitizePricingSnapshot(record?.pricing),
   createdAt: record?.createdAt || null,
   status: record?.status || 'pending',
   reviewedAt: record?.reviewedAt || null,
@@ -457,7 +514,7 @@ const buildApprovalEmailHtml = ({ alias, token, tokenId, ttl, servicePolicies })
     ttlLabel: 'Valid for / Διάρκεια',
     ttlValue: ttl,
     footer:
-      'Use this token in the Softaware Tools Plans page when you need paid access. / Χρησιμοποιήστε το token στη σελίδα Πλάνα του Softaware Tools όταν χρειάζεστε paid πρόσβαση.',
+      'Use this token in the Softaware Tools Plans page when you need premium access. / Χρησιμοποιήστε το token στη σελίδα Πλάνα του Softaware Tools όταν χρειάζεστε premium πρόσβαση.',
   });
 
 const buildRejectionEmailText = ({ alias, reason, servicePolicies }) =>
@@ -518,23 +575,45 @@ export const buildAccessPlanCatalog = () => ({
       ...sanitizePolicy(FREE_ACCESS_SERVICE_POLICIES[serviceKey]),
     })),
   },
-  paidPlans: ACCESS_SERVICE_KEY_LIST.map((serviceKey) => ({
+  premiumPlans: ACCESS_SERVICE_KEY_LIST.map((serviceKey) => ({
     serviceKey,
-    presets: Object.values(ACCESS_TOKEN_SERVICE_POLICY_PRESETS[serviceKey] || {}).map((policy) =>
-      sanitizePolicy(policy),
+    presets: Object.entries(ACCESS_PREMIUM_SERVICE_PRESET_CONFIG[serviceKey] || {}).map(
+      ([presetKey, presetConfig]) => ({
+        ...sanitizePolicy(presetConfig.policy),
+        pricing: sanitizePricingSnapshot({
+          totalAmount: Number(presetConfig?.pricing?.amount || 0),
+          currency: presetConfig?.pricing?.currency,
+          billingMode: presetConfig?.pricing?.billingMode,
+          items: [
+            {
+              serviceKey,
+              preset: presetKey,
+              amount: Number(presetConfig?.pricing?.amount || 0),
+              currency: presetConfig?.pricing?.currency,
+              billingMode: presetConfig?.pricing?.billingMode,
+            },
+          ],
+        }),
+      }),
     ),
   })),
   requestDefaults: {
     ttl: env.tokenRequestDefaultTtl,
+    pricing: {
+      currency: ACCESS_PREMIUM_PRICING_DEFAULTS.currency,
+      billingMode: ACCESS_PREMIUM_PRICING_DEFAULTS.billingMode,
+    },
   },
 });
 
 export const createTokenRequest = ({ alias, email, servicePolicies }) => {
+  const normalizedPolicies = ensureRequestedPolicies(servicePolicies);
   const record = normalizeRequestRecord({
     requestId: randomUUID(),
     alias,
     email,
-    servicePolicies,
+    servicePolicies: normalizedPolicies,
+    pricing: ensurePricingSnapshot(normalizedPolicies),
     createdAt: new Date().toISOString(),
     status: 'pending',
     reviewedAt: null,
@@ -591,6 +670,7 @@ export const approveTokenRequest = async ({
   const created = createAccessTokenImpl({
     alias: target.alias,
     servicePolicies: toPublicRequestRecord(target).servicePolicies,
+    pricingSnapshot: target.pricing,
     ttlSeconds,
     actorTokenId,
   });

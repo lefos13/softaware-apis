@@ -65,6 +65,7 @@ test('CLI superadmin creation and access-token lifecycle work end to end', () =>
 
   assert.equal(created.record.alias, 'Books editor');
   assert.deepEqual(created.record.serviceFlags, [ACCESS_TOKEN_SERVICE_FLAGS.BOOKS_GREEK_EDITOR]);
+  assert.equal(created.record.pricing?.totalAmount, 49);
 
   const listedBeforeRevoke = listAccessTokens();
   assert.equal(listedBeforeRevoke.count, 1);
@@ -84,6 +85,7 @@ test('CLI superadmin creation and access-token lifecycle work end to end', () =>
     ACCESS_TOKEN_SERVICE_FLAGS.BOOKS_GREEK_EDITOR,
     ACCESS_TOKEN_SERVICE_FLAGS.PDF,
   ]);
+  assert.equal(updated.pricing?.totalAmount, 158);
 
   const revoked = revokeAccessToken({
     tokenId: created.record.tokenId,

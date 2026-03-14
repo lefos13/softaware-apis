@@ -4,7 +4,10 @@
  */
 import { env } from '../config/env.js';
 import { ACCESS_TOKEN_SERVICE_FLAG_LIST } from '../modules/admin/admin-token.constants.js';
-import { ACCESS_TOKEN_SERVICE_POLICY_PRESETS } from '../modules/access/access-policy.constants.js';
+import {
+  ACCESS_PREMIUM_PRICING_DEFAULTS,
+  ACCESS_TOKEN_SERVICE_POLICY_PRESETS,
+} from '../modules/access/access-policy.constants.js';
 
 const maxFileSizeMb = Math.floor(env.maxFileSizeBytes / (1024 * 1024));
 const maxTotalUploadMb = Math.floor(env.maxTotalUploadBytes / (1024 * 1024));
@@ -61,7 +64,7 @@ export function buildOpenApiSpec() {
           tags: ['Access'],
           summary: 'Resolve the current caller access plan',
           description:
-            'Returns the active free plan for the caller IP when `x-service-token` is absent, or the token-backed paid plan when a valid access token is supplied.',
+            'Returns the active free plan for the caller IP when `x-service-token` is absent, or the token-backed premium plan when a valid access token is supplied.',
           operationId: 'getAccessPlan',
           parameters: [
             {
@@ -106,7 +109,7 @@ export function buildOpenApiSpec() {
           tags: ['Access'],
           summary: 'Fetch the public access plan catalog',
           description:
-            'Returns the free-plan defaults, paid token presets by service, and the default TTL used when a token request is approved.',
+            'Returns the free-plan defaults, premium token presets by service with pricing metadata, and the default TTL used when a token request is approved.',
           operationId: 'getAccessPlanCatalog',
           responses: {
             200: {
@@ -131,9 +134,9 @@ export function buildOpenApiSpec() {
       '/api/access/token-requests': {
         post: {
           tags: ['Access'],
-          summary: 'Submit a paid token request',
+          summary: 'Submit a premium token request',
           description:
-            'Creates a pending token request with an alias, email, and requested paid service presets. The request remains pending until a superadmin approves or rejects it.',
+            'Creates a pending token request with an alias, email, requested premium service presets, and a server-generated pricing snapshot. The request remains pending until a superadmin approves or rejects it.',
           operationId: 'createTokenRequest',
           requestBody: {
             required: true,
@@ -3813,13 +3816,25 @@ export function buildOpenApiSpec() {
           },
           required: ['tokenId', 'alias', 'serviceFlags', 'expiresAt'],
         },
+        AccessDashboardTokenPayload: {
+          allOf: [
+            { $ref: '#/components/schemas/BooksGreekEditorAccessTokenPayload' },
+            {
+              type: 'object',
+              properties: {
+                pricing: { nullable: true, $ref: '#/components/schemas/AccessPricingSummary' },
+              },
+              required: ['pricing'],
+            },
+          ],
+        },
         BooksGreekEditorAccessPayload: {
           type: 'object',
           properties: {
             authEnabled: { type: 'boolean', example: true },
             token: {
               nullable: true,
-              allOf: [{ $ref: '#/components/schemas/BooksGreekEditorAccessTokenPayload' }],
+              allOf: [{ $ref: '#/components/schemas/AccessDashboardTokenPayload' }],
             },
           },
           required: ['authEnabled', 'token'],
@@ -4025,8 +4040,44 @@ export function buildOpenApiSpec() {
             kind: { type: 'string', example: 'requests_per_day' },
             requestsPerDay: { nullable: true, type: 'integer', minimum: 0, example: 30 },
             wordsTotal: { nullable: true, type: 'integer', minimum: 0, example: 100000 },
+            pricing: { nullable: true, $ref: '#/components/schemas/AccessPricingSummary' },
           },
-          required: ['preset', 'kind', 'requestsPerDay', 'wordsTotal'],
+          required: ['preset', 'kind', 'requestsPerDay', 'wordsTotal', 'pricing'],
+        },
+        AccessPricingItem: {
+          type: 'object',
+          properties: {
+            serviceKey: {
+              type: 'string',
+              enum: ACCESS_TOKEN_SERVICE_FLAG_LIST,
+            },
+            preset: { type: 'string', example: '30_per_day' },
+            amount: { type: 'number', minimum: 0, example: 39 },
+            currency: { type: 'string', example: ACCESS_PREMIUM_PRICING_DEFAULTS.currency },
+            billingMode: {
+              type: 'string',
+              enum: [ACCESS_PREMIUM_PRICING_DEFAULTS.billingMode],
+              example: ACCESS_PREMIUM_PRICING_DEFAULTS.billingMode,
+            },
+          },
+          required: ['serviceKey', 'preset', 'amount', 'currency', 'billingMode'],
+        },
+        AccessPricingSummary: {
+          type: 'object',
+          properties: {
+            totalAmount: { type: 'number', minimum: 0, example: 158 },
+            currency: { type: 'string', example: ACCESS_PREMIUM_PRICING_DEFAULTS.currency },
+            billingMode: {
+              type: 'string',
+              enum: [ACCESS_PREMIUM_PRICING_DEFAULTS.billingMode],
+              example: ACCESS_PREMIUM_PRICING_DEFAULTS.billingMode,
+            },
+            items: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/AccessPricingItem' },
+            },
+          },
+          required: ['totalAmount', 'currency', 'billingMode', 'items'],
         },
         AccessPlanCatalogService: {
           type: 'object',
@@ -4060,7 +4111,7 @@ export function buildOpenApiSpec() {
               },
               required: ['planType', 'services'],
             },
-            paidPlans: {
+            premiumPlans: {
               type: 'array',
               items: { $ref: '#/components/schemas/AccessPlanCatalogService' },
             },
@@ -4068,11 +4119,26 @@ export function buildOpenApiSpec() {
               type: 'object',
               properties: {
                 ttl: { type: 'string', example: '30d' },
+                pricing: {
+                  type: 'object',
+                  properties: {
+                    currency: {
+                      type: 'string',
+                      example: ACCESS_PREMIUM_PRICING_DEFAULTS.currency,
+                    },
+                    billingMode: {
+                      type: 'string',
+                      enum: [ACCESS_PREMIUM_PRICING_DEFAULTS.billingMode],
+                      example: ACCESS_PREMIUM_PRICING_DEFAULTS.billingMode,
+                    },
+                  },
+                  required: ['currency', 'billingMode'],
+                },
               },
-              required: ['ttl'],
+              required: ['ttl', 'pricing'],
             },
           },
-          required: ['freePlan', 'paidPlans', 'requestDefaults'],
+          required: ['freePlan', 'premiumPlans', 'requestDefaults'],
         },
         AccessPlanCatalogSuccessResponse: {
           type: 'object',
@@ -4097,7 +4163,7 @@ export function buildOpenApiSpec() {
         AccessDashboardPayload: {
           type: 'object',
           properties: {
-            token: { $ref: '#/components/schemas/BooksGreekEditorAccessTokenPayload' },
+            token: { $ref: '#/components/schemas/AccessDashboardTokenPayload' },
             services: {
               type: 'array',
               items: { $ref: '#/components/schemas/AccessPlanServiceSummary' },
@@ -4123,6 +4189,7 @@ export function buildOpenApiSpec() {
             alias: { type: 'string', example: 'Editorial desk' },
             email: { type: 'string', format: 'email', example: 'editor@example.com' },
             servicePolicies: { $ref: '#/components/schemas/AccessServicePolicyMap' },
+            pricing: { nullable: true, $ref: '#/components/schemas/AccessPricingSummary' },
             createdAt: { nullable: true, type: 'string', format: 'date-time' },
             status: {
               type: 'string',
@@ -4141,6 +4208,7 @@ export function buildOpenApiSpec() {
             'alias',
             'email',
             'servicePolicies',
+            'pricing',
             'createdAt',
             'status',
             'reviewedAt',
@@ -4244,6 +4312,7 @@ export function buildOpenApiSpec() {
               },
               example: ['books_greek_editor'],
             },
+            pricing: { nullable: true, $ref: '#/components/schemas/AccessPricingSummary' },
             createdAt: { nullable: true, type: 'string', format: 'date-time' },
             expiresAt: { nullable: true, type: 'string', format: 'date-time' },
             revokedAt: { nullable: true, type: 'string', format: 'date-time' },
@@ -4273,6 +4342,7 @@ export function buildOpenApiSpec() {
             'alias',
             'servicePolicies',
             'serviceFlags',
+            'pricing',
             'createdAt',
             'expiresAt',
             'revokedAt',

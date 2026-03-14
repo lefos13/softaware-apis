@@ -9,15 +9,17 @@ import { dirname, resolve } from 'node:path';
 import { ApiError } from '../../common/utils/api-error.js';
 import { env } from '../../config/env.js';
 import {
+  ACCESS_PREMIUM_PRICING_DEFAULTS,
   ACCESS_TOKEN_SERVICE_POLICY_PRESETS,
   DEFAULT_LEGACY_TOKEN_SERVICE_POLICIES,
+  buildPremiumPricingSnapshot,
   clonePolicy,
   deriveServiceFlagsFromPolicies,
   getTokenPolicyPresetNames,
 } from '../access/access-policy.constants.js';
 import { ACCESS_TOKEN_SERVICE_FLAG_LIST, TOKEN_TYPES } from './admin-token.constants.js';
 
-const STORE_VERSION = 3;
+const STORE_VERSION = 4;
 const MAX_ALIAS_LENGTH = 80;
 
 const parseDurationToSeconds = (rawValue) => {
@@ -83,6 +85,50 @@ const normalizeAliasValue = (alias) =>
     .trim()
     .replace(/\s+/g, ' ')
     .slice(0, MAX_ALIAS_LENGTH);
+
+const sanitizePricingSnapshot = (pricing) => {
+  if (!pricing || typeof pricing !== 'object') {
+    return null;
+  }
+
+  const items = Array.isArray(pricing?.items)
+    ? pricing.items
+        .map((item) => ({
+          serviceKey: String(item?.serviceKey || '').trim(),
+          preset: String(item?.preset || '').trim(),
+          amount: Number.isFinite(Number(item?.amount)) ? Number(item.amount) : null,
+          currency: String(item?.currency || ACCESS_PREMIUM_PRICING_DEFAULTS.currency).trim(),
+          billingMode: String(
+            item?.billingMode || ACCESS_PREMIUM_PRICING_DEFAULTS.billingMode,
+          ).trim(),
+        }))
+        .filter((item) => item.serviceKey && item.preset && item.amount !== null)
+    : [];
+
+  return {
+    totalAmount: Number.isFinite(Number(pricing?.totalAmount)) ? Number(pricing.totalAmount) : 0,
+    currency: String(pricing?.currency || ACCESS_PREMIUM_PRICING_DEFAULTS.currency).trim(),
+    billingMode: String(pricing?.billingMode || ACCESS_PREMIUM_PRICING_DEFAULTS.billingMode).trim(),
+    items,
+  };
+};
+
+/*
+ * Access tokens store a pricing snapshot beside quota presets so admin-created
+ * tokens and approved requests expose the same auditable quote data later.
+ */
+const resolvePricingSnapshot = (servicePolicies, pricingSnapshot) => {
+  if (!servicePolicies || Object.keys(servicePolicies).length === 0) {
+    return null;
+  }
+
+  const sanitized = sanitizePricingSnapshot(pricingSnapshot);
+  if (sanitized && sanitized.items.length > 0) {
+    return sanitized;
+  }
+
+  return sanitizePricingSnapshot(buildPremiumPricingSnapshot(servicePolicies));
+};
 
 const ensureAlias = (alias, field = 'alias') => {
   const normalized = normalizeAliasValue(alias);
@@ -280,6 +326,10 @@ const normalizeStoreRecord = (record = {}) => {
       : {};
   const serviceFlags =
     tokenType === TOKEN_TYPES.ACCESS ? deriveServiceFlagsFromPolicies(servicePolicies) : [];
+  const pricing =
+    tokenType === TOKEN_TYPES.ACCESS
+      ? resolvePricingSnapshot(servicePolicies, record?.pricing)
+      : null;
   const createdAt = record?.createdAt || new Date().toISOString();
   const renewedAt = record?.renewedAt || null;
   const usageCycleStartedAt =
@@ -294,6 +344,7 @@ const normalizeStoreRecord = (record = {}) => {
         : normalizeAliasValue(record?.alias || toLegacyAccessAlias(record)) || 'Access token',
     serviceFlags,
     servicePolicies,
+    pricing,
     ttlSeconds: Number.isInteger(ttlSeconds) && ttlSeconds > 0 ? ttlSeconds : 30 * 24 * 60 * 60,
     tokenHash,
     createdAt,
@@ -394,6 +445,7 @@ export const toPublicTokenRecord = (record) => ({
           ]),
         )
       : {},
+  pricing: sanitizePricingSnapshot(record?.pricing),
   createdAt: record?.createdAt || null,
   expiresAt: record?.expiresAt || null,
   revokedAt: record?.revokedAt || null,
@@ -471,10 +523,17 @@ export const createSuperAdminToken = ({ alias, ttlSeconds }) => {
   };
 };
 
-export const createAccessToken = ({ alias, servicePolicies, ttlSeconds, actorTokenId }) => {
+export const createAccessToken = ({
+  alias,
+  servicePolicies,
+  ttlSeconds,
+  actorTokenId,
+  pricingSnapshot = null,
+}) => {
   const normalizedAlias = ensureAlias(alias);
   const normalizedPolicies = normalizeServicePolicies(servicePolicies);
   validateTtlSeconds(ttlSeconds);
+  const pricing = resolvePricingSnapshot(normalizedPolicies, pricingSnapshot);
 
   const tokenId = randomUUID();
   const token = buildPlainToken();
@@ -488,6 +547,7 @@ export const createAccessToken = ({ alias, servicePolicies, ttlSeconds, actorTok
     alias: normalizedAlias,
     serviceFlags: deriveServiceFlagsFromPolicies(normalizedPolicies),
     servicePolicies: normalizedPolicies,
+    pricing,
     ttlSeconds,
     tokenHash: hashToken(token),
     createdAt,
@@ -514,6 +574,7 @@ export const createAccessToken = ({ alias, servicePolicies, ttlSeconds, actorTok
 export const updateAccessToken = ({ tokenId, alias, servicePolicies }) => {
   const normalizedAlias = ensureAlias(alias);
   const normalizedPolicies = normalizeServicePolicies(servicePolicies);
+  const pricing = resolvePricingSnapshot(normalizedPolicies);
   const store = readStore();
 
   const nextTokens = store.tokens.map((record) => {
@@ -526,6 +587,7 @@ export const updateAccessToken = ({ tokenId, alias, servicePolicies }) => {
       ...record,
       alias: normalizedAlias,
       servicePolicies: normalizedPolicies,
+      pricing,
       serviceFlags: deriveServiceFlagsFromPolicies(normalizedPolicies),
     };
   });
@@ -594,6 +656,10 @@ export const renewAccessToken = ({
     servicePolicies === undefined
       ? target.servicePolicies
       : normalizeServicePolicies(servicePolicies);
+  const pricing =
+    servicePolicies === undefined
+      ? resolvePricingSnapshot(normalizedPolicies, target.pricing)
+      : resolvePricingSnapshot(normalizedPolicies);
 
   const token = buildPlainToken();
   const renewedAt = new Date().toISOString();
@@ -604,6 +670,7 @@ export const renewAccessToken = ({
       ? {
           ...record,
           servicePolicies: normalizedPolicies,
+          pricing,
           serviceFlags: deriveServiceFlagsFromPolicies(normalizedPolicies),
           tokenHash: hashToken(token),
           ttlSeconds: nextTtlSeconds,
